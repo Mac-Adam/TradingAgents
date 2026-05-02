@@ -1,0 +1,56 @@
+services:
+  tailscale:
+    image: tailscale/tailscale:latest
+    hostname: tailscale-agent-dev
+    environment:
+      - TS_AUTHKEY=tskey-auth-key
+      # - TS_EXTRA_ARGS=--advertise-tags=tag:container
+      - TS_STATE_DIR=/var/lib/tailscale
+      - TS_USERSPACE=false
+    volumes:
+      - ./tailscale-nginx/state:/var/lib/tailscale
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    restart: unless-stopped
+
+  nginx:
+    image: nginx
+    depends_on:
+      - tailscale
+    network_mode: service:tailscale
+
+  ollama:
+    image: ollama/ollama
+    network_mode: service:tailscale
+    volumes: 
+      - ./ollama_data:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+
+  secure_agent_sandbox:
+    build: .  # Builds from the Dockerfile you just created
+    depends_on:
+      - tailscale
+    network_mode: service:tailscale # FIX: Sandbox now shares the VPN IP
+    volumes:
+      - ./project_files:/app
+      - ssh_keys:/etc/ssh
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+volumes:
+  ssh_keys:

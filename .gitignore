@@ -1,3 +1,5 @@
+webapp/backend/reports
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
@@ -148,6 +150,7 @@ activemq-data/
 *.sage.py
 
 # Environments
+*.env
 .env
 .envrc
 .venv

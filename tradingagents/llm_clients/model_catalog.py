@@ -103,11 +103,13 @@ MODEL_OPTIONS: ProviderModeOptions = {
     "ollama": {
         "quick": [
             ("Qwen3:latest (8B, local)", "qwen3:latest"),
+            ("gemma4:e4b (8B, local)", "gemma4:32k_ctx"),
             ("GPT-OSS:latest (20B, local)", "gpt-oss:latest"),
             ("GLM-4.7-Flash:latest (30B, local)", "glm-4.7-flash:latest"),
         ],
         "deep": [
             ("GLM-4.7-Flash:latest (30B, local)", "glm-4.7-flash:latest"),
+            ("gemma4:e4b (8B, local)", "gemma4:32k_ctx"),
             ("GPT-OSS:latest (20B, local)", "gpt-oss:latest"),
             ("Qwen3:latest (8B, local)", "qwen3:latest"),
         ],

@@ -1,0 +1,28 @@
+# TradingAgents Comprehensive Plan
+
+## 1. Executing trades on real market (with a demo account)
+- [x] **a)** Selected Alpaca as the provider for market execution.
+- [x] **b)** Allow the agent to make the trade after the decision is made.
+- [x] **c)** Give agents knowledge about the current state of the trade (e.g., if propagation on NVDA is done, the manager knows that currently 5% of the portfolio is in NVIDIA).
+
+## 2. Enhance UI
+- [x] **a)** Select a framework (either stick with the CLI or get something more advanced, possibly even a website). -> Selected FastAPI + Vite/React + Tailwind
+- [ ] **b)** Features / Requirements:
+  - [ ] **24/7 Execution & Remote Attach/Detach**: Since the repo is on a remote PC connected via SSH, keep the app running 24/7 with the ability to "attach" and "detach" via SSH.
+  - [ ] **Multiple 'runs'**: Ability to run multiple instances of the same (or different) swarms of agents simultaneously to evaluate different models/approaches on the real market demo.
+  - [x] **Dashboard Display**: Display current balance of the account, its history, and the current portfolio. → Alpaca API integration.
+  - [x] **Scheduler**: Allow setting propagation schedules. → Task executor with ASAP / scheduled / daily recurrence.
+  - [x] **Visual Differentiation**: Ensure PAPER and REAL accounts are distinguished visually. → Red BG for REAL, blue badges for PAPER.
+
+## 3. Enhance the framework
+- [ ] **a)** **Ticker Selector**: The swarm currently requires the exact ticker to propagate. Add a "ticker selector" Agent (or swarm of agents) that analyzes the broad market and chooses interesting stocks possibly worth looking into. This would then be propagated by the already existing swarm of agents along with the stocks currently in the portfolio.
+- [ ] **b)** **Report Maker**: At the end of each run, add an additional agent (Report Maker) that analyzes the responses and prepares a summary for future agents to use (for example, so that they know why they bought something some time ago).
+- [/] **c)** **Wallet View Backend Integration**: 
+  - [x] Connect Wallet View to real balance/equity APIs.
+  - [x] Connect Wallet View to real active trades APIs.
+  - [x] Implement task scheduling and automation bots for the Agent Queue. → `task_executor.py` with sequential worker thread.
+  - [ ] Implement full CLI-like interactive output in the task details panel.
+
+## Architectural Notes
+- **Task Executor**: `webapp/backend/task_executor.py` runs a single daemon worker thread that processes tasks sequentially across all wallets. Env vars are loaded per-task via `dotenv(override=True)`. This means tasks from different wallets are safe but run one-at-a-time.
+- **Reports**: Saved to `webapp/backend/reports/{run_id}/{TICKER_TIMESTAMP}/` using `cli.main.save_report_to_disk`.

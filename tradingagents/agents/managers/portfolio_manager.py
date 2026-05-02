@@ -38,6 +38,8 @@ def create_portfolio_manager(llm):
             if past_context
             else ""
         )
+        
+        portfolio_state = state.get("portfolio_state", "Portfolio state unavailable.")
 
         prompt = f"""As the Portfolio Manager, synthesize the risk analysts' debate and deliver the final trading decision.
 
@@ -45,12 +47,16 @@ def create_portfolio_manager(llm):
 
 ---
 
-**Rating Scale** (use exactly one):
-- **Buy**: Strong conviction to enter or add to position
-- **Overweight**: Favorable outlook, gradually increase exposure
-- **Hold**: Maintain current position, no action needed
-- **Underweight**: Reduce exposure, take partial profits
-- **Sell**: Exit position or avoid entry
+**Target Allocation**:
+Specify the exact target weight percentage of the overall portfolio for this instrument.
+- Range: -10 to 10
+- -10% represents maximum short exposure.
+- 10% represents maximum long exposure.
+- 0% represents no position (exit entirely).
+- Adjust sizing based on conviction and risk tolerance.
+
+**Current Portfolio Context:**
+{portfolio_state}
 
 **Context:**
 - Research Manager's investment plan: **{research_plan}**

@@ -1,0 +1,216 @@
+import sqlite3
+import json
+import os
+import threading
+from typing import Dict, List, Optional, Any
+
+DB_PATH = os.path.join(os.path.dirname(__file__), "backend.db")
+_db_lock = threading.Lock()
+
+def get_conn():
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False, timeout=10.0)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def init_db():
+    with _db_lock:
+        with get_conn() as conn:
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS runs (
+                    id TEXT PRIMARY KEY,
+                    wallet_name TEXT,
+                    config_file TEXT,
+                    env_file TEXT,
+                    account_type TEXT,
+                    status TEXT,
+                    created_at TEXT
+                )
+            ''')
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS tasks (
+                    id TEXT PRIMARY KEY,
+                    run_id TEXT,
+                    ticker TEXT,
+                    status TEXT,
+                    created_at TEXT,
+                    scheduled_at TEXT,
+                    recurrence TEXT,
+                    report_path TEXT,
+                    error TEXT,
+                    decision TEXT,
+                    stats TEXT,
+                    cancel_requested INTEGER DEFAULT 0
+                )
+            ''')
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS decision_history (
+                    id TEXT PRIMARY KEY,
+                    run_id TEXT,
+                    task_id TEXT,
+                    ticker TEXT,
+                    action TEXT,
+                    rationale TEXT,
+                    full_report_path TEXT,
+                    timestamp TEXT,
+                    stats TEXT
+                )
+            ''')
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS task_logs (
+                    task_id TEXT PRIMARY KEY,
+                    logs TEXT
+                )
+            ''')
+            conn.commit()
+
+# --- RUNS ---
+def get_runs() -> List[Dict]:
+    with _db_lock:
+        with get_conn() as conn:
+            rows = conn.execute("SELECT * FROM runs ORDER BY created_at DESC").fetchall()
+            return [dict(row) for row in rows]
+
+def add_run(run: Dict):
+    with _db_lock:
+        with get_conn() as conn:
+            conn.execute('''
+                INSERT INTO runs (id, wallet_name, config_file, env_file, account_type, status, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', (run['id'], run['wallet_name'], run['config_file'], run['env_file'], run['account_type'], run['status'], run['created_at']))
+            conn.commit()
+
+def remove_run(run_id: str):
+    with _db_lock:
+        with get_conn() as conn:
+            conn.execute("DELETE FROM runs WHERE id = ?", (run_id,))
+            conn.commit()
+
+# --- TASKS ---
+def get_tasks_for_run(run_id: str) -> List[Dict]:
+    with _db_lock:
+        with get_conn() as conn:
+            rows = conn.execute("SELECT * FROM tasks WHERE run_id = ? ORDER BY created_at DESC", (run_id,)).fetchall()
+            tasks = []
+            for r in rows:
+                d = dict(r)
+                d['stats'] = json.loads(d['stats']) if d['stats'] else None
+                d['cancel_requested'] = bool(d['cancel_requested'])
+                tasks.append(d)
+            return tasks
+
+def add_task(task_dict: Dict):
+    stats_str = json.dumps(task_dict.get('stats')) if task_dict.get('stats') else None
+    with _db_lock:
+        with get_conn() as conn:
+            conn.execute('''
+                INSERT INTO tasks (id, run_id, ticker, status, created_at, scheduled_at, recurrence, report_path, error, decision, stats, cancel_requested)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (task_dict['id'], task_dict['run_id'], task_dict['ticker'], task_dict['status'],
+                  task_dict['created_at'], task_dict['scheduled_at'], task_dict['recurrence'],
+                  task_dict['report_path'], task_dict['error'], task_dict['decision'], stats_str,
+                  int(task_dict.get('cancel_requested', False))))
+            conn.commit()
+
+def update_task(task_dict: Dict):
+    stats_str = json.dumps(task_dict.get('stats')) if task_dict.get('stats') else None
+    with _db_lock:
+        with get_conn() as conn:
+            conn.execute('''
+                UPDATE tasks 
+                SET status = ?, scheduled_at = ?, recurrence = ?, report_path = ?, error = ?, decision = ?, stats = ?, cancel_requested = ?
+                WHERE id = ?
+            ''', (task_dict['status'], task_dict['scheduled_at'], task_dict['recurrence'],
+                  task_dict['report_path'], task_dict['error'], task_dict['decision'], stats_str,
+                  int(task_dict.get('cancel_requested', False)), task_dict['id']))
+            conn.commit()
+
+def get_task(task_id: str) -> Optional[Dict]:
+    with _db_lock:
+        with get_conn() as conn:
+            row = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
+            if row:
+                d = dict(row)
+                d['stats'] = json.loads(d['stats']) if d['stats'] else None
+                d['cancel_requested'] = bool(d['cancel_requested'])
+                return d
+            return None
+
+def remove_task(task_id: str) -> bool:
+    with _db_lock:
+        with get_conn() as conn:
+            row = conn.execute("SELECT status FROM tasks WHERE id = ?", (task_id,)).fetchone()
+            if row and row['status'] == 'queued':
+                conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+                conn.commit()
+                return True
+            return False
+
+def get_queued_tasks() -> List[Dict]:
+    with _db_lock:
+        with get_conn() as conn:
+            rows = conn.execute("SELECT * FROM tasks WHERE status = 'queued' ORDER BY created_at ASC").fetchall()
+            tasks = []
+            for r in rows:
+                d = dict(r)
+                d['stats'] = json.loads(d['stats']) if d['stats'] else None
+                d['cancel_requested'] = bool(d['cancel_requested'])
+                tasks.append(d)
+            return tasks
+
+def delete_task_force(task_id: str):
+    with _db_lock:
+        with get_conn() as conn:
+            conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+            conn.commit()
+
+# --- HISTORY ---
+def add_decision(decision: Dict):
+    stats_str = json.dumps(decision.get('stats')) if decision.get('stats') else None
+    with _db_lock:
+        with get_conn() as conn:
+            conn.execute('''
+                INSERT INTO decision_history (id, run_id, task_id, ticker, action, rationale, full_report_path, timestamp, stats)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (decision['id'], decision['run_id'], decision['task_id'], decision['ticker'],
+                  decision['action'], decision['rationale'], decision['full_report_path'],
+                  decision['timestamp'], stats_str))
+            conn.commit()
+
+def get_history_for_run(run_id: str) -> List[Dict]:
+    with _db_lock:
+        with get_conn() as conn:
+            rows = conn.execute("SELECT * FROM decision_history WHERE run_id = ? ORDER BY timestamp DESC", (run_id,)).fetchall()
+            history = []
+            for r in rows:
+                d = dict(r)
+                d['stats'] = json.loads(d['stats']) if d['stats'] else None
+                history.append(d)
+            return history
+
+def get_history_entry(history_id: str) -> Optional[Dict]:
+    with _db_lock:
+        with get_conn() as conn:
+            row = conn.execute("SELECT * FROM decision_history WHERE id = ?", (history_id,)).fetchone()
+            if row:
+                d = dict(row)
+                d['stats'] = json.loads(d['stats']) if d['stats'] else None
+                return d
+            return None
+
+# --- LOGS ---
+def save_task_logs(task_id: str, logs: str):
+    with _db_lock:
+        with get_conn() as conn:
+            conn.execute('''
+                INSERT INTO task_logs (task_id, logs) VALUES (?, ?)
+                ON CONFLICT(task_id) DO UPDATE SET logs = excluded.logs
+            ''', (task_id, logs))
+            conn.commit()
+
+def get_task_logs(task_id: str) -> Optional[str]:
+    with _db_lock:
+        with get_conn() as conn:
+            row = conn.execute("SELECT logs FROM task_logs WHERE task_id = ?", (task_id,)).fetchone()
+            if row:
+                return row['logs']
+            return None

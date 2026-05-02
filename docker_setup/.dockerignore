@@ -1,0 +1,30 @@
+# Node dependencies
+node_modules/
+npm-debug.log
+
+# Ignore Ollama models
+ollama_data/
+
+# Ignore Node modules
+node_modules/
+project_files/TradingAgents/webapp/frontend/node_modules/
+
+# Ignore Python caches and Git history (Best Practice)
+__pycache__/
+.git/
+
+# Python dependencies and caches
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+
+# Git
+.git/
+
+# Ignore the virtual environment if you have one locally
+project_files/TradingAgents/webapp/frontend/node_modules/

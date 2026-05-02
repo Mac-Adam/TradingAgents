@@ -269,3 +269,41 @@ Please reference our work if you find *TradingAgents* provides you with some hel
       url={https://arxiv.org/abs/2412.20138}, 
 }
 ```
+
+## Recent Additions
+
+### Implemented Features
+* **Real Market Execution**: Added the ability to execute trades on a real market (demo account) using a provider available in Poland. Agents now have context about the current state of trades and portfolio distribution (e.g., knowing what percentage of the portfolio is allocated to a specific stock before making decisions).
+* **Enhanced UI Dashboard**: Transitioned from a CLI-only interface to a full web application featuring a FastAPI backend and a Vite/React + Tailwind frontend.
+
+### How to Run the Web Dashboard
+
+To run the full web dashboard, you will need to start both the backend API and the frontend application.
+
+#### 1. Start the Backend Server
+Make sure you have the required backend dependencies (e.g., `fastapi` and `uvicorn`). Then run:
+```bash
+cd webapp/backend
+uvicorn main:app --reload
+```
+
+or 
+
+```bash
+nohup uvicorn main:app --host 0.0.0.0 --port 8000 > backend.log 2>&1 &
+
+pkill -f uvicorn
+```
+In 'detached' mode
+
+
+The API server will run on `http://127.0.0.1:8000`.
+
+#### 2. Start the Frontend Server
+Open a new terminal window, navigate to the frontend directory, install the Node packages, and start the development server:
+```bash
+cd webapp/frontend
+npm install
+npm run dev
+```
+The UI will be accessible at the local URL provided by Vite (usually `http://localhost:5173`).
