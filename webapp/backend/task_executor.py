@@ -16,7 +16,7 @@ import logging
 import traceback
 import uuid
 from dataclasses import dataclass, field, asdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional, Dict, List, Any
 
@@ -95,7 +95,7 @@ def add_task(
 ) -> TaskRecord:
     """Add a task to the global queue."""
     task_id = str(uuid.uuid4())
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
     sched = None
     if schedule_mode == "scheduled" and scheduled_at:
@@ -150,30 +150,12 @@ def get_task_logs(task_id: str) -> Optional[str]:
 # ── Worker ─────────────────────────────────────────────────────────────────────
 
 def _get_next_task() -> Optional[TaskRecord]:
-    """Pick the oldest task that is ready to run."""
-    now = datetime.utcnow()
-    queued = db.get_queued_tasks()
-    candidates = []
-    for t_dict in queued:
-        if t_dict['scheduled_at']:
-            try:
-                sched_dt = datetime.fromisoformat(t_dict['scheduled_at'])
-                # Ensure naive UTC for comparison (strip tzinfo if present)
-                if sched_dt.tzinfo is not None:
-                    sched_dt = sched_dt.replace(tzinfo=None)
-                if sched_dt > now:
-                    continue  # not yet
-            except ValueError:
-                pass  # malformed — treat as ASAP
-        candidates.append(t_dict)
-    
-    if not candidates:
-        return None
-    
-    chosen_dict = candidates[0]
-    chosen_dict['status'] = 'running'
-    db.update_task(chosen_dict)
-    return TaskRecord(**chosen_dict)
+    """Pick the oldest task that is ready to run, atomically."""
+    now_iso = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    task_dict = db.claim_next_task(now_iso)
+    if task_dict:
+        return TaskRecord(**task_dict)
+    return None
 
 
 def _load_config_for_run(run: dict) -> dict:
@@ -235,7 +217,7 @@ def _execute_task(task: TaskRecord):
     logger.info("Task %s: llm_provider=%s  deep=%s  quick=%s  backend_url=%s",
                 task.id, config.get("llm_provider"), config.get("deep_think_llm"),
                 config.get("quick_think_llm"), config.get("backend_url"))
-    trade_date = datetime.utcnow().strftime("%Y-%m-%d")
+    trade_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     # Use all analysts (maxed-out run)
     selected_analysts = ["market", "social", "news", "fundamentals"]
@@ -381,7 +363,7 @@ def _execute_task(task: TaskRecord):
         task.stats = stats
 
         # Save report
-        timestamp_str = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        timestamp_str = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         report_dir = Path(REPORTS_DIR) / task.run_id / f"{task.ticker}_{timestamp_str}"
         report_dir.mkdir(parents=True, exist_ok=True)
         report_file = save_report_to_disk(final_state, task.ticker, report_dir)
@@ -411,7 +393,7 @@ def _execute_task(task: TaskRecord):
             action=action_val,
             rationale=rationale_snippet,
             full_report_path=str(report_file),
-            timestamp=datetime.utcnow().isoformat(),
+            timestamp=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             stats=stats,
         )
         db.add_decision(history_entry.to_dict())
@@ -444,7 +426,7 @@ def _push_failed_to_history(task: TaskRecord):
         action="FAILED",
         rationale=task.error or "Unknown error",
         full_report_path=None,
-        timestamp=datetime.utcnow().isoformat(),
+        timestamp=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         stats=task.stats,
     )
     db.add_decision(history_entry.to_dict())
@@ -465,14 +447,10 @@ def _is_market_day(date: datetime) -> bool:
 
 
 def _next_market_day(after: datetime, target_hour: int, target_minute: int) -> datetime:
-    """Return the next NYSE trading day at the given UTC time, starting from `after`.
-    
-    Works correctly whether target_hour is early morning (e.g. 02:00) or late evening
-    (e.g. 22:00) because the NYSE open/close check is purely by calendar date.
-    A Friday 22:00 run will schedule Monday 22:00 (skipping Sat/Sun).
-    """
-    # Always strip tzinfo so we stay in naive UTC space
-    after = after.replace(tzinfo=None)
+    """Return the next NYSE trading day at the given UTC time, starting from `after`."""
+    # Ensure after is aware UTC
+    if after.tzinfo is None:
+        after = after.replace(tzinfo=timezone.utc)
     candidate = after.replace(hour=target_hour, minute=target_minute, second=0, microsecond=0)
     if candidate <= after:
         candidate += timedelta(days=1)
@@ -492,14 +470,14 @@ def _handle_recurrence(task: TaskRecord):
         try:
             hour = int(parts[1])
             minute = int(parts[2])
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             next_run = _next_market_day(now, hour, minute)
 
             add_task(
                 run_id=task.run_id,
                 ticker=task.ticker,
                 schedule_mode="scheduled",
-                scheduled_at=next_run.isoformat(),
+                scheduled_at=next_run.isoformat().replace("+00:00", "Z"),
                 recurrence=task.recurrence,
             )
             logger.info("Task %s: scheduled next recurrence at %s (next market day)", task.id, next_run.isoformat())

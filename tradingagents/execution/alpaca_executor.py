@@ -3,6 +3,7 @@ import re
 import logging
 import math
 import yfinance as yf
+from tradingagents.dataflows.stockstats_utils import StockstatsUtils
 from alpaca.trading.client import TradingClient
 from alpaca.trading.requests import MarketOrderRequest
 from alpaca.trading.enums import OrderSide, TimeInForce
@@ -88,7 +89,8 @@ class AlpacaExecutor:
             
             # Fetch current stock price to calculate whole shares
             try:
-                stock = yf.Ticker(ticker)
+                sanitized_ticker = StockstatsUtils.sanitize_yf_ticker(ticker)
+                stock = yf.Ticker(sanitized_ticker)
                 current_price = stock.fast_info['lastPrice']
             except Exception as e:
                 logger.error(f"Error fetching current price for {ticker} via yfinance: {e}")

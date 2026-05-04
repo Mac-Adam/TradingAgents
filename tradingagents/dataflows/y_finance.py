@@ -16,7 +16,8 @@ def get_YFin_data_online(
     datetime.strptime(end_date, "%Y-%m-%d")
 
     # Create ticker object
-    ticker = yf.Ticker(symbol.upper())
+    sanitized_symbol = StockstatsUtils.sanitize_yf_ticker(symbol)
+    ticker = yf.Ticker(sanitized_symbol)
 
     # Fetch historical data for the specified date range
     data = yf_retry(lambda: ticker.history(start=start_date, end=end_date))
@@ -251,7 +252,8 @@ def get_fundamentals(
 ):
     """Get company fundamentals overview from yfinance."""
     try:
-        ticker_obj = yf.Ticker(ticker.upper())
+        sanitized_ticker = StockstatsUtils.sanitize_yf_ticker(ticker)
+        ticker_obj = yf.Ticker(sanitized_ticker)
         info = yf_retry(lambda: ticker_obj.info)
 
         if not info:
@@ -309,7 +311,8 @@ def get_balance_sheet(
 ):
     """Get balance sheet data from yfinance."""
     try:
-        ticker_obj = yf.Ticker(ticker.upper())
+        sanitized_ticker = StockstatsUtils.sanitize_yf_ticker(ticker)
+        ticker_obj = yf.Ticker(sanitized_ticker)
 
         if freq.lower() == "quarterly":
             data = yf_retry(lambda: ticker_obj.quarterly_balance_sheet)
@@ -341,7 +344,8 @@ def get_cashflow(
 ):
     """Get cash flow data from yfinance."""
     try:
-        ticker_obj = yf.Ticker(ticker.upper())
+        sanitized_ticker = StockstatsUtils.sanitize_yf_ticker(ticker)
+        ticker_obj = yf.Ticker(sanitized_ticker)
 
         if freq.lower() == "quarterly":
             data = yf_retry(lambda: ticker_obj.quarterly_cashflow)
@@ -373,7 +377,8 @@ def get_income_statement(
 ):
     """Get income statement data from yfinance."""
     try:
-        ticker_obj = yf.Ticker(ticker.upper())
+        sanitized_ticker = StockstatsUtils.sanitize_yf_ticker(ticker)
+        ticker_obj = yf.Ticker(sanitized_ticker)
 
         if freq.lower() == "quarterly":
             data = yf_retry(lambda: ticker_obj.quarterly_income_stmt)
@@ -403,7 +408,8 @@ def get_insider_transactions(
 ):
     """Get insider transactions data from yfinance."""
     try:
-        ticker_obj = yf.Ticker(ticker.upper())
+        sanitized_ticker = StockstatsUtils.sanitize_yf_ticker(ticker)
+        ticker_obj = yf.Ticker(sanitized_ticker)
         data = yf_retry(lambda: ticker_obj.insider_transactions)
         
         if data is None or data.empty:

@@ -163,6 +163,34 @@ def delete_task_force(task_id: str):
             conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
             conn.commit()
 
+def claim_next_task(now_iso: str) -> Optional[Dict]:
+    """Atomically find the next ready task and mark it as 'running'."""
+    with _db_lock:
+        with get_conn() as conn:
+            # Find the oldest task that is ready to run
+            # Ready = status is 'queued' AND (no schedule OR schedule time reached)
+            query = """
+                SELECT id FROM tasks 
+                WHERE status = 'queued' 
+                  AND (scheduled_at IS NULL OR scheduled_at <= ?)
+                ORDER BY created_at ASC
+                LIMIT 1
+            """
+            row = conn.execute(query, (now_iso,)).fetchone()
+            if not row:
+                return None
+            
+            task_id = row['id']
+            conn.execute("UPDATE tasks SET status = 'running' WHERE id = ?", (task_id,))
+            conn.commit()
+            
+            # Re-fetch the full task to return to executor
+            row = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
+            d = dict(row)
+            d['stats'] = json.loads(d['stats']) if d['stats'] else None
+            d['cancel_requested'] = bool(d['cancel_requested'])
+            return d
+
 # --- HISTORY ---
 def add_decision(decision: Dict):
     stats_str = json.dumps(decision.get('stats')) if decision.get('stats') else None

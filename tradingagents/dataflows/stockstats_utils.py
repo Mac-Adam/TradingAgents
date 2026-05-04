@@ -13,12 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 def yf_retry(func, max_retries=3, base_delay=2.0):
-    """Execute a yfinance call with exponential backoff on rate limits.
-
-    yfinance raises YFRateLimitError on HTTP 429 responses but does not
-    retry them internally. This wrapper adds retry logic specifically
-    for rate limits. Other exceptions propagate immediately.
-    """
+    """Execute a yfinance call with exponential backoff on rate limits."""
     for attempt in range(max_retries + 1):
         try:
             return func()
@@ -69,8 +64,9 @@ def load_ohlcv(symbol: str, curr_date: str) -> pd.DataFrame:
     if os.path.exists(data_file):
         data = pd.read_csv(data_file, on_bad_lines="skip", encoding="utf-8")
     else:
+        sanitized_symbol = StockstatsUtils.sanitize_yf_ticker(symbol)
         data = yf_retry(lambda: yf.download(
-            symbol,
+            sanitized_symbol,
             start=start_str,
             end=end_str,
             multi_level_index=False,
@@ -103,6 +99,13 @@ def filter_financials_by_date(data: pd.DataFrame, curr_date: str) -> pd.DataFram
 
 
 class StockstatsUtils:
+    @staticmethod
+    def sanitize_yf_ticker(ticker: str) -> str:
+        """Convert ticker symbols to a format compatible with yfinance (e.g., BRK.B -> BRK-B)."""
+        if not ticker:
+            return ticker
+        return ticker.replace(".", "-").upper()
+
     @staticmethod
     def get_stock_stats(
         symbol: Annotated[str, "ticker symbol for the company"],

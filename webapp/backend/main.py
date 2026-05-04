@@ -134,7 +134,7 @@ def create_run(run_req: RunRequest):
         "env_file": run_req.env_file,
         "account_type": account_type,
         "status": "running",
-        "created_at": datetime.utcnow().isoformat(),
+        "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
     }
     add_run(new_run)
     return new_run

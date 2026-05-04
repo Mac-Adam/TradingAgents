@@ -16,7 +16,7 @@ const PRESETS = [
 export default function TaskForm({ walletId, onTaskAdded }: Props) {
   const [ticker, setTicker] = useState('');
   const [scheduleMode, setScheduleMode] = useState<'asap' | 'scheduled'>('asap');
-  const [scheduledAt, setScheduledAt] = useState('');
+  const [scheduledAt, setScheduledAt] = useState(() => new Date().toISOString().slice(0, 16));
   const [recurring, setRecurring] = useState(false);
   const [recurTime, setRecurTime] = useState('21:00');
   const [isQueueing, setIsQueueing] = useState(false);
@@ -33,7 +33,7 @@ export default function TaskForm({ walletId, onTaskAdded }: Props) {
         const body: Record<string, string | null> = {
           ticker: t,
           schedule_mode: scheduleMode,
-          scheduled_at: scheduleMode === 'scheduled' && scheduledAt ? new Date(scheduledAt).toISOString() : null,
+          scheduled_at: scheduleMode === 'scheduled' && scheduledAt ? new Date(scheduledAt + ':00Z').toISOString() : null,
           recurrence: scheduleMode === 'scheduled' && recurring ? `daily:${recurTime}` : null,
         };
         return fetch(`${API}/api/runs/${walletId}/tasks`, {
@@ -98,14 +98,19 @@ export default function TaskForm({ walletId, onTaskAdded }: Props) {
 
       {scheduleMode === 'scheduled' && (
         <div className="space-y-2 pl-2 border-l-2 border-accent/30">
-          <div>
-            <label className="text-slate-400 text-xs uppercase block mb-1">Run at</label>
-            <input
-              type="datetime-local"
-              value={scheduledAt}
-              onChange={e => setScheduledAt(e.target.value)}
-              className="bg-black border border-slate-600 rounded p-2 text-white text-sm outline-none focus:border-accent"
-            />
+          <div className="flex items-end gap-3">
+            <div className="flex-grow">
+              <label className="text-slate-400 text-xs uppercase block mb-1">Run at (UTC)</label>
+              <input
+                type="datetime-local"
+                value={scheduledAt}
+                onChange={e => setScheduledAt(e.target.value)}
+                className="w-full bg-black border border-slate-600 rounded p-2 text-white text-sm outline-none focus:border-accent"
+              />
+            </div>
+            <div className="text-[10px] text-slate-500 font-mono mb-2 bg-slate-900 px-2 py-1 rounded border border-slate-700">
+              Current UTC: {new Date().toISOString().slice(0, 16).replace('T', ' ')}
+            </div>
           </div>
           <label className="flex items-center gap-2 cursor-pointer">
             <input type="checkbox" checked={recurring} onChange={e => setRecurring(e.target.checked)} className="accent-accent" />

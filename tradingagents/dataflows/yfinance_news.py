@@ -3,8 +3,7 @@
 import yfinance as yf
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
-
-from .stockstats_utils import yf_retry
+from .stockstats_utils import StockstatsUtils, yf_retry
 
 
 def _extract_article_data(article: dict) -> dict:
@@ -65,7 +64,8 @@ def get_news_yfinance(
         Formatted string containing news articles
     """
     try:
-        stock = yf.Ticker(ticker)
+        sanitized_ticker = StockstatsUtils.sanitize_yf_ticker(ticker)
+        stock = yf.Ticker(sanitized_ticker)
         news = yf_retry(lambda: stock.get_news(count=20))
 
         if not news:

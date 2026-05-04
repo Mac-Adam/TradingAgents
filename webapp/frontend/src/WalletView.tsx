@@ -101,7 +101,7 @@ export default function WalletView({ wallet, onBack, onDelete }: WalletViewProps
 
   useEffect(() => {
     fetchAccount(); fetchPositions(); fetchTasks(); fetchHistory(); fetchServerTime();
-    const iv = setInterval(() => { fetchAccount(); fetchPositions(); fetchTasks(); fetchHistory(); fetchServerTime(); }, 10_000);
+    const iv = setInterval(() => { fetchTasks(); fetchHistory(); fetchServerTime(); }, 10_000);
     return () => clearInterval(iv);
   }, [fetchAccount, fetchPositions, fetchTasks, fetchHistory, fetchServerTime]);
 
