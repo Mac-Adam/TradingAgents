@@ -18,7 +18,7 @@ import uuid
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Optional, Dict, List, Any
+from typing import Optional, Dict, List, Any, Union
 
 logger = logging.getLogger(__name__)
 
@@ -265,9 +265,8 @@ def _execute_task(task: TaskRecord):
         graph._resolve_pending_entries(task.ticker)
         
         past_context = graph.memory_log.get_past_context(task.ticker)
-        portfolio_state = graph.alpaca_executor.get_portfolio_state()
         init_agent_state = graph.propagator.create_initial_state(
-            task.ticker, trade_date, past_context=past_context, portfolio_state=portfolio_state
+            task.ticker, trade_date, past_context=past_context
         )
         args = graph.propagator.get_graph_args(callbacks=[stats_handler, cancel_handler])
 

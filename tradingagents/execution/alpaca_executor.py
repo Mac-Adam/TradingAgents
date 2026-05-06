@@ -85,8 +85,6 @@ class AlpacaExecutor:
                 current_value = 0.0
                 current_qty = 0.0
                 
-            delta_value = target_value - current_value
-            
             # Fetch current stock price to calculate whole shares
             try:
                 sanitized_ticker = StockstatsUtils.sanitize_yf_ticker(ticker)
@@ -96,33 +94,45 @@ class AlpacaExecutor:
                 logger.error(f"Error fetching current price for {ticker} via yfinance: {e}")
                 return
                 
-            delta_shares = delta_value / current_price
+            # Calculate total shares to trade and the direction
+            target_qty = round(target_value / current_price)
+            total_shares_to_trade = abs(target_qty - current_qty)
+            side = OrderSide.BUY if target_qty > current_qty else OrderSide.SELL
             
-            # Round to whole shares (positive = buy, negative = sell/short)
-            trade_shares = round(delta_shares)
-            
-            if trade_shares > 0:
-                order_data = MarketOrderRequest(
-                    symbol=ticker,
-                    qty=trade_shares,
-                    side=OrderSide.BUY,
-                    time_in_force=TimeInForce.DAY
-                )
-                order = self.client.submit_order(order_data=order_data)
-                logger.info(f"Executed BUY order for {ticker}: {trade_shares} shares to reach {target_weight_percentage}% weight. Order ID: {order.id}")
+            if total_shares_to_trade == 0:
+                logger.info(f"Target weight already met for {ticker} (Target Qty: {target_qty}). No trade executed.")
+                return
+
+            # Determine if we need to chunk the orders
+            # Restriction: Alpaca sometimes caps orders at the current physical quantity during off-hours.
+            if current_qty != 0:
+                chunk_size = abs(current_qty)
+                shares_remaining = total_shares_to_trade
                 
-            elif trade_shares < 0:
-                order_data = MarketOrderRequest(
-                    symbol=ticker,
-                    qty=abs(trade_shares),
-                    side=OrderSide.SELL,
-                    time_in_force=TimeInForce.DAY
-                )
-                order = self.client.submit_order(order_data=order_data)
-                logger.info(f"Executed SELL order for {ticker}: {abs(trade_shares)} shares to reach {target_weight_percentage}% weight. Order ID: {order.id}")
+                logger.info(f"Executing trade for {ticker} in chunks of {chunk_size} (Total: {total_shares_to_trade} shares {side.name})")
                 
+                while shares_remaining > 0:
+                    this_qty = min(shares_remaining, chunk_size)
+                    order_data = MarketOrderRequest(
+                        symbol=ticker,
+                        qty=this_qty,
+                        side=side,
+                        time_in_force=TimeInForce.DAY
+                    )
+                    order = self.client.submit_order(order_data=order_data)
+                    logger.info(f"Submitted chunk: {side.name} {this_qty} shares. Order ID: {order.id}")
+    
+                    shares_remaining -= this_qty
             else:
-                logger.info(f"Target weight already met within 1 share rounding (Delta: ${delta_value:.2f}). No trade executed.")
+                # No existing position, submit full order in one go
+                order_data = MarketOrderRequest(
+                    symbol=ticker,
+                    qty=total_shares_to_trade,
+                    side=side,
+                    time_in_force=TimeInForce.DAY
+                )
+                order = self.client.submit_order(order_data=order_data)
+                logger.info(f"Executed {side.name} order for {ticker}: {total_shares_to_trade} shares to reach {target_weight_percentage}% weight. Order ID: {order.id}")
                 
         except Exception as e:
-            logger.error(f"Error executing Alpaca trade: {e}")
+            logger.error(f"Error executing Alpaca trade for {ticker}: {e}")

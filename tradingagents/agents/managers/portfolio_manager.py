@@ -38,9 +38,7 @@ def create_portfolio_manager(llm):
             if past_context
             else ""
         )
-        
-        portfolio_state = state.get("portfolio_state", "Portfolio state unavailable.")
-
+        # Prompt construction
         prompt = f"""As the Portfolio Manager, synthesize the risk analysts' debate and deliver the final trading decision.
 
 {instrument_context}
@@ -54,9 +52,7 @@ Specify the exact target weight percentage of the overall portfolio for this ins
 - 10% represents maximum long exposure.
 - 0% represents no position (exit entirely).
 - Adjust sizing based on conviction and risk tolerance.
-
-**Current Portfolio Context:**
-{portfolio_state}
+- Make sure it is just a single number in range -10 to 10
 
 **Context:**
 - Research Manager's investment plan: **{research_plan}**

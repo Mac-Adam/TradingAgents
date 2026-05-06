@@ -140,7 +140,11 @@ export default function WalletView({ wallet, onBack, onDelete }: WalletViewProps
     try { return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }); } catch { return iso; }
   };
 
-  const formatTokens = (n: number) => n >= 1000 ? (n / 1000).toFixed(1) + 'K' : n.toString();
+  const formatTokens = (n: number) => {
+    if (n >= 1000000) return (n / 1000000).toFixed(2) + 'M';
+    if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
+    return n.toString();
+  };
 
   const getActionStyle = (action: string) => {
     if (action.startsWith('Target ')) {
@@ -160,9 +164,18 @@ export default function WalletView({ wallet, onBack, onDelete }: WalletViewProps
       acc.in += curr.stats.tokens_in || 0;
       acc.out += curr.stats.tokens_out || 0;
       acc.tools += curr.stats.tool_calls || 0;
+      
+      if (curr.stats.quick) {
+        acc.quick_in += curr.stats.quick.tokens_in || 0;
+        acc.quick_out += curr.stats.quick.tokens_out || 0;
+      }
+      if (curr.stats.deep) {
+        acc.deep_in += curr.stats.deep.tokens_in || 0;
+        acc.deep_out += curr.stats.deep.tokens_out || 0;
+      }
     }
     return acc;
-  }, { calls: 0, in: 0, out: 0, tools: 0 });
+  }, { calls: 0, in: 0, out: 0, tools: 0, quick_in: 0, quick_out: 0, deep_in: 0, deep_out: 0 });
 
   // ── Render ──────────────────────────────────
   return (
@@ -337,11 +350,19 @@ export default function WalletView({ wallet, onBack, onDelete }: WalletViewProps
               <span className="text-xs text-slate-500 font-medium">Click for report</span>
             </div>
             {history.length > 0 && (
-              <div className="flex gap-4 text-xs font-mono text-slate-400 bg-slate-800/50 p-2.5 rounded-lg border border-slate-700/50">
-                <span title="Total LLM Calls">🧠 {totalStats.calls}</span>
-                <span title="Total Input Tokens">📥 {formatTokens(totalStats.in)}</span>
-                <span title="Total Output Tokens">📤 {formatTokens(totalStats.out)}</span>
-                <span title="Total Tool Executions">🛠 {totalStats.tools}</span>
+              <div className="flex flex-col gap-2 bg-slate-800/50 p-3 rounded-lg border border-slate-700/50">
+                <div className="flex gap-4 text-xs font-mono text-slate-300">
+                  <span title="Total LLM Calls">🧠 {totalStats.calls}</span>
+                  <span title="Total Input Tokens">📥 {formatTokens(totalStats.in)}</span>
+                  <span title="Total Output Tokens">📤 {formatTokens(totalStats.out)}</span>
+                  <span title="Total Tool Executions">🛠 {totalStats.tools}</span>
+                </div>
+                {(totalStats.quick_in > 0 || totalStats.deep_in > 0) && (
+                  <div className="flex gap-3 text-[10px] font-mono text-slate-500 border-t border-slate-700/50 pt-2">
+                    <span className="text-blue-400/70">QUICK: {formatTokens(totalStats.quick_in + totalStats.quick_out)}</span>
+                    <span className="text-purple-400/70">DEEP: {formatTokens(totalStats.deep_in + totalStats.deep_out)}</span>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -364,11 +385,19 @@ export default function WalletView({ wallet, onBack, onDelete }: WalletViewProps
                   <p className="mt-2 text-xs leading-relaxed line-clamp-2 text-red-400">{d.rationale}</p>
                 )}
                 {d.stats && (
-                  <div className="mt-3 flex gap-4 text-[10px] text-slate-500 font-mono border-t border-slate-700/50 pt-2">
-                    <span title="LLM Calls">🧠 {d.stats.llm_calls || 0}</span>
-                    <span title="Input Tokens">📥 {formatTokens(d.stats.tokens_in || 0)}</span>
-                    <span title="Output Tokens">📤 {formatTokens(d.stats.tokens_out || 0)}</span>
-                    <span title="Tool Executions">🛠 {d.stats.tool_calls || 0}</span>
+                  <div className="mt-3 space-y-1.5 border-t border-slate-700/50 pt-2">
+                    <div className="flex gap-4 text-[10px] text-slate-500 font-mono">
+                      <span title="LLM Calls">🧠 {d.stats.llm_calls || 0}</span>
+                      <span title="Input Tokens">📥 {formatTokens(d.stats.tokens_in || 0)}</span>
+                      <span title="Output Tokens">📤 {formatTokens(d.stats.tokens_out || 0)}</span>
+                      <span title="Tool Executions">🛠 {d.stats.tool_calls || 0}</span>
+                    </div>
+                    {(d.stats.quick || d.stats.deep) && (
+                      <div className="flex gap-3 text-[9px] font-mono opacity-60">
+                        {d.stats.quick && <span className="text-blue-400">Q: {formatTokens((d.stats.quick.tokens_in || 0) + (d.stats.quick.tokens_out || 0))}</span>}
+                        {d.stats.deep && <span className="text-purple-400">D: {formatTokens((d.stats.deep.tokens_in || 0) + (d.stats.deep.tokens_out || 0))}</span>}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

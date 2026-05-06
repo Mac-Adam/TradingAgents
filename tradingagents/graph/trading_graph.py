@@ -305,9 +305,8 @@ class TradingAgentsGraph:
         """Execute the graph and write the resulting state to disk and memory log."""
         # Initialize state — inject memory log context for PM.
         past_context = self.memory_log.get_past_context(company_name)
-        portfolio_state = self.alpaca_executor.get_portfolio_state()
         init_agent_state = self.propagator.create_initial_state(
-            company_name, trade_date, past_context=past_context, portfolio_state=portfolio_state
+            company_name, trade_date, past_context=past_context
         )
         if callbacks:
             args = self.propagator.get_graph_args(callbacks=callbacks)
@@ -388,7 +387,8 @@ class TradingAgentsGraph:
         }
 
         # Save to file
-        directory = Path(self.config["results_dir"]) / self.ticker / "TradingAgentsStrategy_logs"
+        ticker = self.ticker or final_state.get("company_of_interest") or "unknown"
+        directory = Path(self.config["results_dir"]) / ticker / "TradingAgentsStrategy_logs"
         directory.mkdir(parents=True, exist_ok=True)
 
         log_path = directory / f"full_states_log_{trade_date}.json"

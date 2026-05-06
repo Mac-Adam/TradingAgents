@@ -8,8 +8,8 @@
     "anthropic_effort": null,
     "checkpoint_enabled": false,
     "output_language": "English",
-    "max_debate_rounds": 5,
-    "max_risk_discuss_rounds": 5,
+    "max_debate_rounds": 4,
+    "max_risk_discuss_rounds": 4,
     "max_recur_limit": 100,
     "data_vendors": {
         "core_stock_apis": "yfinance",
