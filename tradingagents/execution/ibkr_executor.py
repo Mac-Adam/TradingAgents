@@ -1,0 +1,119 @@
+import os
+import json
+import logging
+import re
+import yfinance as yf
+from ib_insync import IB, Stock, MarketOrder
+
+from webapp.backend import db
+
+logger = logging.getLogger(__name__)
+
+class IBKRExecutor:
+    def __init__(self, host=None, port=None, client_id=1):
+        self.host = host or os.getenv("IB_HOST", "127.0.0.1")
+        self.port = port or int(os.getenv("IB_PORT", "7497"))
+        self.client_id = client_id
+        self.ib = IB()
+
+    def _get_current_price(self, ticker):
+        try:
+            stock = yf.Ticker(ticker)
+            return float(stock.fast_info['lastPrice'])
+        except Exception as e:
+            logger.error(f"Error fetching current price for {ticker} via yfinance: {e}")
+            return None
+
+    def calculate_net_worth(self, ai_id):
+        portfolio = db.get_ai_portfolio(ai_id)
+        net_worth = portfolio["cash"]
+        for ticker, qty in portfolio["positions"].items():
+            if qty != 0:
+                price = self._get_current_price(ticker)
+                if price is not None:
+                    net_worth += qty * price
+        return net_worth
+
+    def batch_execute(self, trades_list):
+        """
+        Expects a list of dicts: [{'ai_id': 'bot1', 'ticker': 'AAPL', 'decision': '...'}, ...]
+        Calculates relative weights across all requested trades and executes them.
+        Any existing position not included in the trades_list is closed out.
+        """
+        if not trades_list:
+            return
+
+        ai_id = trades_list[0]['ai_id']
+        portfolio = db.get_ai_portfolio(ai_id)
+        net_worth = self.calculate_net_worth(ai_id)
+        
+        # Parse all weights from trades_list
+        target_weights = {}
+        for trade in trades_list:
+            match = re.search(r"\*\*Target Weight\*\*:\s*(-?\d+)", trade['decision'])
+            if match:
+                target_weights[trade['ticker']] = float(match.group(1))
+            else:
+                logger.warning(f"[{ai_id}] Could not parse Target Weight for {trade['ticker']}.")
+                target_weights[trade['ticker']] = 0.0
+
+        sum_abs_weights = sum(abs(w) for w in target_weights.values())
+        
+        # Connect to IBKR
+        try:
+            if not self.ib.isConnected():
+                self.ib.connect(self.host, self.port, clientId=self.client_id)
+
+            # We need to process all current positions plus new tickers
+            all_tickers = set(portfolio["positions"].keys()).union(set(target_weights.keys()))
+            
+            for ticker in all_tickers:
+                weight = target_weights.get(ticker, 0.0)
+                
+                if sum_abs_weights > 0:
+                    relative_weight = weight / sum_abs_weights
+                else:
+                    relative_weight = 0.0
+                    
+                target_value = relative_weight * net_worth
+                current_price = self._get_current_price(ticker)
+                
+                if current_price is None or current_price == 0:
+                    logger.warning(f"[{ai_id}] Could not get price for {ticker}. Skipping.")
+                    continue
+                    
+                current_qty = portfolio["positions"].get(ticker, 0.0)
+                current_value = current_qty * current_price
+                
+                value_to_trade = target_value - current_value
+                shares_to_trade = value_to_trade / current_price
+                
+                abs_shares = abs(shares_to_trade)
+                if abs_shares < 0.0001:
+                    logger.info(f"[{ai_id}] Target allocation already met for {ticker}.")
+                    continue
+                    
+                # Execute
+                action = 'BUY' if shares_to_trade > 0 else 'SELL'
+                
+                contract = Stock(ticker, 'SMART', 'USD')
+                self.ib.qualifyContracts(contract)
+
+                # OPG Time in Force is used for Market On Open orders
+                order = MarketOrder(action, abs_shares, tif='OPG')
+                order.orderRef = ai_id
+                
+                trade = self.ib.placeOrder(contract, order)
+                logger.info(f"[{ai_id}] Queued MOO {action} {abs_shares:.4f} {ticker} (orderRef: {ai_id})")
+                
+                # Update virtual state
+                portfolio["positions"][ticker] = current_qty + shares_to_trade
+                portfolio["cash"] -= value_to_trade
+            
+            db.save_ai_portfolio(ai_id, portfolio["cash"], portfolio["positions"])
+
+        except Exception as e:
+            logger.error(f"[{ai_id}] Error executing IBKR batch trades: {e}")
+        finally:
+            if self.ib.isConnected():
+                self.ib.disconnect()

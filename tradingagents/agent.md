@@ -15,9 +15,11 @@ This directory is the heart of the TradingAgents framework. It defines the multi
     *   Handles data from AlphaVantage (fundamentals, indicators, news, stock data) and Yahoo Finance (yfinance).
     *   `interface.py` & `stockstats_utils.py`: Abstractions and utilities for financial math and data presentation.
 *   **`graph/`**: The LangGraph implementation mapping the workflow of the agents.
-    *   `trading_graph.py`: The `TradingAgentsGraph` class that initializes and runs the `propagate()` flow.
+    *   `trading_graph.py`: The `TradingAgentsGraph` class that initializes and runs the `propagate()` flow. *Note: Trade execution is decoupled. The graph pushes actionable decisions to a `pending_trades` table, which is then processed by a standalone `execution` task.*
     *   `checkpointer.py`: Logic for saving and resuming the state (SQLite checkpointer).
     *   `conditional_logic.py` / `propagation.py` / `reflection.py`: Logic controlling how the state moves between the agents.
+*   **`execution/`**: Modules handling interactions with actual brokers.
+    *   `ibkr_executor.py`: Interactive Brokers integration via `ib_insync`. Uses virtual sub-accounts (`ai_portfolios` in DB) to allow multiple AIs to share a single IBKR paper account.
 *   **`llm_clients/`**: Adapters for different LLM providers (OpenAI, Google, Anthropic, DeepSeek, xAI, OpenRouter, Azure, Ollama). Uses a Factory pattern (`factory.py`) to instantiate clients based on config.
     *   `model_catalog.py`: Defines supported models and their context window limits.
 

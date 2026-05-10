@@ -48,6 +48,7 @@ class TaskRecord:
     decision: Optional[str] = None  # e.g. "Buy", "Sell", "Hold"
     stats: Optional[Dict] = None
     cancel_requested: bool = False
+    task_type: str = "analysis"
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -92,6 +93,7 @@ def add_task(
     schedule_mode: str = "asap",
     scheduled_at: Optional[str] = None,
     recurrence: Optional[str] = None,
+    task_type: str = "analysis",
 ) -> TaskRecord:
     """Add a task to the global queue."""
     task_id = str(uuid.uuid4())
@@ -111,6 +113,7 @@ def add_task(
         created_at=now,
         scheduled_at=sched,
         recurrence=recurrence if schedule_mode == "scheduled" else None,
+        task_type=task_type,
     )
     db.add_task(task.to_dict())
     return task
@@ -217,6 +220,52 @@ def _execute_task(task: TaskRecord):
     logger.info("Task %s: llm_provider=%s  deep=%s  quick=%s  backend_url=%s",
                 task.id, config.get("llm_provider"), config.get("deep_think_llm"),
                 config.get("quick_think_llm"), config.get("backend_url"))
+
+    if getattr(task, "task_type", "analysis") == "execution":
+        try:
+            logger.info("Task %s: Running standalone Trade Executor for wallet %s", task.id, run["wallet_name"])
+            from tradingagents.execution.ibkr_executor import IBKRExecutor
+            executor = IBKRExecutor()
+            
+            # Fetch the pending trades for this run
+            pending = db.get_pending_trades(run["id"])
+            if not pending:
+                logger.info("Task %s: No pending trades found", task.id)
+                task.status = "completed"
+                task.decision = "No trades pending"
+                db.delete_task_force(task.id)
+                return
+
+            trades_to_make = []
+            trade_ids_to_clear = []
+            for entry in pending:
+                decision = entry.get("decision", "")
+                if "Target Weight" in decision:
+                    trades_to_make.append({
+                        "ai_id": run["id"], # Using run_id as the unique AI identifier
+                        "ticker": entry["ticker"],
+                        "decision": decision
+                    })
+                    trade_ids_to_clear.append(entry["id"])
+            
+            if trades_to_make:
+                executor.batch_execute(trades_to_make)
+                db.clear_pending_trades(run["id"], trade_ids_to_clear)
+            
+            task.status = "completed"
+            task.decision = f"Executed {len(trades_to_make)} trades"
+            logger.info("Task %s: Executed batch trades successfully", task.id)
+            db.delete_task_force(task.id)
+        except Exception as e:
+            tb = traceback.format_exc()
+            task.status = "failed"
+            task.error = f"{type(e).__name__}: {str(e)}"
+            logger.error("Task %s execution FAILED: %s\n%s", task.id, e, tb)
+            db.delete_task_force(task.id)
+        finally:
+            _save_logs()
+        return
+
     trade_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     # Use all analysts (maxed-out run)
@@ -371,9 +420,11 @@ def _execute_task(task: TaskRecord):
         import re
         action_val = "Hold"
         if isinstance(decision, str):
-            match = re.search(r"\*\*Target Weight\*\*:\s*(-?\d+)%", decision)
+            match = re.search(r"\*\*Target Weight\*\*:\s*(-?\d+)", decision)
             if match:
-                action_val = f"Target {match.group(1)}%"
+                action_val = f"Target Weight: {match.group(1)}"
+                # Add to pending trades since we have an actionable target
+                db.add_pending_trade(task.run_id, task.ticker, decision)
             else:
                 action_val = "Completed"
         else:

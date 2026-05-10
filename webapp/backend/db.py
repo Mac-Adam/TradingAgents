@@ -61,6 +61,26 @@ def init_db():
                     logs TEXT
                 )
             ''')
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS ai_portfolios (
+                    ai_id TEXT PRIMARY KEY,
+                    cash REAL,
+                    positions TEXT
+                )
+            ''')
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS pending_trades (
+                    id TEXT PRIMARY KEY,
+                    run_id TEXT,
+                    ticker TEXT,
+                    decision TEXT,
+                    created_at TEXT
+                )
+            ''')
+            try:
+                conn.execute("ALTER TABLE tasks ADD COLUMN task_type TEXT DEFAULT 'analysis'")
+            except sqlite3.OperationalError:
+                pass
             conn.commit()
 
 # --- RUNS ---
@@ -100,15 +120,16 @@ def get_tasks_for_run(run_id: str) -> List[Dict]:
 
 def add_task(task_dict: Dict):
     stats_str = json.dumps(task_dict.get('stats')) if task_dict.get('stats') else None
+    task_type = task_dict.get('task_type', 'analysis')
     with _db_lock:
         with get_conn() as conn:
             conn.execute('''
-                INSERT INTO tasks (id, run_id, ticker, status, created_at, scheduled_at, recurrence, report_path, error, decision, stats, cancel_requested)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO tasks (id, run_id, ticker, status, created_at, scheduled_at, recurrence, report_path, error, decision, stats, cancel_requested, task_type)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (task_dict['id'], task_dict['run_id'], task_dict['ticker'], task_dict['status'],
                   task_dict['created_at'], task_dict['scheduled_at'], task_dict['recurrence'],
                   task_dict['report_path'], task_dict['error'], task_dict['decision'], stats_str,
-                  int(task_dict.get('cancel_requested', False))))
+                  int(task_dict.get('cancel_requested', False)), task_type))
             conn.commit()
 
 def update_task(task_dict: Dict):
@@ -242,3 +263,60 @@ def get_task_logs(task_id: str) -> Optional[str]:
             if row:
                 return row['logs']
             return None
+
+# --- AI PORTFOLIOS ---
+def get_ai_portfolio(ai_id: str) -> Dict:
+    with _db_lock:
+        with get_conn() as conn:
+            row = conn.execute("SELECT * FROM ai_portfolios WHERE ai_id = ?", (ai_id,)).fetchone()
+            if row:
+                return {
+                    "cash": row["cash"],
+                    "positions": json.loads(row["positions"])
+                }
+            return {
+                "cash": 100000.0,
+                "positions": {}
+            }
+
+def save_ai_portfolio(ai_id: str, cash: float, positions: Dict):
+    with _db_lock:
+        with get_conn() as conn:
+            conn.execute('''
+                INSERT INTO ai_portfolios (ai_id, cash, positions)
+                VALUES (?, ?, ?)
+                ON CONFLICT(ai_id) DO UPDATE SET
+                    cash = excluded.cash,
+                    positions = excluded.positions
+            ''', (ai_id, cash, json.dumps(positions)))
+            conn.commit()
+
+# --- PENDING TRADES ---
+def add_pending_trade(run_id: str, ticker: str, decision: str):
+    import uuid
+    from datetime import datetime, timezone
+    trade_id = str(uuid.uuid4())
+    now_iso = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    with _db_lock:
+        with get_conn() as conn:
+            conn.execute('''
+                INSERT INTO pending_trades (id, run_id, ticker, decision, created_at)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (trade_id, run_id, ticker, decision, now_iso))
+            conn.commit()
+
+def get_pending_trades(run_id: str) -> List[Dict]:
+    with _db_lock:
+        with get_conn() as conn:
+            rows = conn.execute("SELECT * FROM pending_trades WHERE run_id = ? ORDER BY created_at ASC", (run_id,)).fetchall()
+            return [dict(row) for row in rows]
+
+def clear_pending_trades(run_id: str, ids: List[str] = None):
+    with _db_lock:
+        with get_conn() as conn:
+            if ids:
+                placeholders = ','.join('?' * len(ids))
+                conn.execute(f"DELETE FROM pending_trades WHERE run_id = ? AND id IN ({placeholders})", [run_id] + ids)
+            else:
+                conn.execute("DELETE FROM pending_trades WHERE run_id = ?", (run_id,))
+            conn.commit()

@@ -3,3 +3,4 @@ fastapi[standard]
 uvicorn
 apscheduler
 pandas_market_calendars
+ib_insync

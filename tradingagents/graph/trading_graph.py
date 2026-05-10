@@ -83,6 +83,10 @@ class TradingAgentsGraph:
         if self.callbacks:
             llm_kwargs["callbacks"] = self.callbacks
 
+        # Add global LLM options
+        if "max_retries" in self.config:
+            llm_kwargs["max_retries"] = self.config["max_retries"]
+
         deep_client = create_llm_client(
             provider=self.config["llm_provider"],
             model=self.config["deep_think_llm"],
@@ -343,8 +347,8 @@ class TradingAgentsGraph:
             final_trade_decision=final_state["final_trade_decision"],
         )
         
-        # Execute trade on Alpaca
-        self.alpaca_executor.execute_trade(company_name, final_state["final_trade_decision"])
+        # Note: Trade execution has been moved to a standalone EXECUTE_TRADES task
+        # self.alpaca_executor.execute_trade(company_name, final_state["final_trade_decision"])
 
         # Clear checkpoint on successful completion to avoid stale state.
         if self.config.get("checkpoint_enabled"):

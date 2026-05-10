@@ -18,5 +18,6 @@ When you start working on a task in the `TradingAgents` repository, you MUST fol
 2. **Drill Down**: Based on the task, identify the relevant subsystem (`tradingagents`, `cli`, `scripts`, `tests`, `assets`).
 3. **Read Local Context**: Read the `agent.md` file located inside the specific subsystem folder you need to work in (e.g., if you are editing core logic, read `/app/TradingAgents/tradingagents/agent.md`).
 4. **Follow Conventions**: Adhere to the design patterns and instructions outlined in those documentation files.
+5. **Update Context As You Go**: When you introduce new modules, features, or architectural changes, you MUST automatically update the relevant `agent.md` files and `TODO.md` to keep the repository knowledge current without being explicitly asked.
 
 By reading these `agent.md` files, you will gain immediate, accurate context about the project without needing to blindly search through the repository.

@@ -7,6 +7,7 @@
 This repository is structured into several key components. For deeper context, an `agent.md` file is provided within each major subfolder detailing its specific role and internals.
 
 *   **`tradingagents/`**: The core package and engine of the framework. It houses the LLM clients, trading graphs (LangGraph workflows), dataflows (AlphaVantage, Yahoo Finance, etc.), and the specific agent implementations (analysts, managers, researchers, trader). **Start here if you are modifying core trading logic or adding new agents.** -> *See `tradingagents/agent.md`*
+*   **`webapp/`**: The web interface and backend API, including task scheduling and database persistence for scalable, multi-run executions. -> *See `webapp/agent.md`*
 *   **`cli/`**: The Command Line Interface logic. Contains the interactive prompt for running analyses and the output handling mechanisms. -> *See `cli/agent.md`*
 *   **`scripts/`**: Utility and maintenance scripts (e.g., smoke testing the structured outputs). -> *See `scripts/agent.md`*
 *   **`tests/`**: The test suite covering signal processing, memory logs, model validation, and structured outputs. -> *See `tests/agent.md`*

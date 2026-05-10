@@ -22,6 +22,7 @@ DEFAULT_CONFIG = {
     # being forwarded to Gemini, producing malformed request URLs).
     "backend_url": None,
     # Provider-specific thinking configuration
+    "max_retries": 6,                   # Maximum number of API retries for transient errors
     "google_thinking_level": None,      # "high", "minimal", etc.
     "openai_reasoning_effort": None,    # "medium", "high", "low"
     "anthropic_effort": None,           # "high", "medium", "low"

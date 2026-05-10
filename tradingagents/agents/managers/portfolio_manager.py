@@ -46,13 +46,13 @@ def create_portfolio_manager(llm):
 ---
 
 **Target Allocation**:
-Specify the exact target weight percentage of the overall portfolio for this instrument.
+Specify the exact target weight of the overall portfolio for this instrument.
 - Range: -10 to 10
-- -10% represents maximum short exposure.
-- 10% represents maximum long exposure.
-- 0% represents no position (exit entirely).
+- -10 represents maximum short exposure.
+- 10 represents maximum long exposure.
+- 0 represents no position (exit entirely).
 - Adjust sizing based on conviction and risk tolerance.
-- Make sure it is just a single number in range -10 to 10
+- Make sure this field contains a single number in range -10 to 10
 
 **Context:**
 - Research Manager's investment plan: **{research_plan}**

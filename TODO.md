@@ -1,7 +1,7 @@
 # TradingAgents Comprehensive Plan
 
 ## 1. Executing trades on real market (with a demo account)
-- [x] **a)** Selected Alpaca as the provider for market execution.
+- [x] **a)** Selected Interactive Brokers (IBKR) as the provider for market execution.
 - [x] **b)** Allow the agent to make the trade after the decision is made.
 - [x] **c)** Give agents knowledge about the current state of the trade (e.g., if propagation on NVDA is done, the manager knows that currently 5% of the portfolio is in NVIDIA).
 
@@ -10,7 +10,7 @@
 - [ ] **b)** Features / Requirements:
   - [ ] **24/7 Execution & Remote Attach/Detach**: Since the repo is on a remote PC connected via SSH, keep the app running 24/7 with the ability to "attach" and "detach" via SSH.
   - [ ] **Multiple 'runs'**: Ability to run multiple instances of the same (or different) swarms of agents simultaneously to evaluate different models/approaches on the real market demo.
-  - [x] **Dashboard Display**: Display current balance of the account, its history, and the current portfolio. → Alpaca API integration.
+  - [x] **Dashboard Display**: Display current balance of the account, its history, and the current portfolio. → IBKR Virtual Portfolio via SQLite.
   - [x] **Scheduler**: Allow setting propagation schedules. → Task executor with ASAP / scheduled / daily recurrence.
   - [x] **Visual Differentiation**: Ensure PAPER and REAL accounts are distinguished visually. → Red BG for REAL, blue badges for PAPER.
 
@@ -25,4 +25,6 @@
 
 ## Architectural Notes
 - **Task Executor**: `webapp/backend/task_executor.py` runs a single daemon worker thread that processes tasks sequentially across all wallets. Env vars are loaded per-task via `dotenv(override=True)`. This means tasks from different wallets are safe but run one-at-a-time.
+- **Task Types**: `task_executor` now supports `task_type` (e.g., `analysis`, `execution`). The `analysis` task runs the LLM graph and pushes actionable decisions into the `pending_trades` SQLite table. The `execution` task pulls from `pending_trades` to execute batches on IBKR, ensuring scalability and decoupling of analysis and execution.
 - **Reports**: Saved to `webapp/backend/reports/{run_id}/{TICKER_TIMESTAMP}/` using `cli.main.save_report_to_disk`.
+- **IBKR Executor**: Uses `webapp/backend/db.py` to maintain virtual sub-accounts (`ai_portfolios`) since paper IBKR accounts are limited to one per user. Trade orders are tagged via `orderRef` to track which AI placed them.

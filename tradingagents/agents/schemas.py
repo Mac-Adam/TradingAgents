@@ -177,10 +177,10 @@ class PortfolioDecision(BaseModel):
     the rating-scale guidance.
     """
 
-    target_weight_percentage: int = Field(
+    target_weight: int = Field(
         ge=-10,
         le=10,
-        description="Target percentage of the overall portfolio to allocate to this instrument (-10 to 10). -10 means maximum short exposure, 10 means maximum long exposure, 0 means no position.",
+        description="Target weight of the instrument relative to others (-10 to 10). -10 means maximum short weight, 10 means maximum long weight, 0 means no position. This is a relative weight, not a percentage.",
     )
     executive_summary: str = Field(
         description=(
@@ -214,7 +214,7 @@ def render_pm_decision(decision: PortfolioDecision) -> str:
     parsers and the report writers already handle.
     """
     parts = [
-        f"**Target Weight**: {decision.target_weight_percentage}%",
+        f"**Target Weight**: {decision.target_weight}",
         "",
         f"**Executive Summary**: {decision.executive_summary}",
         "",
