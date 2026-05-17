@@ -292,7 +292,7 @@ Or to run in the background (detached mode):
 
 ```bash
 cd webapp/backend
-nohup uvicorn main:app --host 0.0.0.0 --port 8000 > backend.log 2>&1 &
+nohup uvicorn main:app --host 0.0.0.0 --port 8000 --reload > backend.log 2>&1 &
 ```
 
 To stop the background server:

@@ -1,0 +1,73 @@
+
+personal
+
+A new version of Docker Desktop is available.
+Containers
+tradingagentssandbox-ib_gateway-1
+
+tradingagentssandbox-ib_gateway-1
+da2e8ff9c4a3
+gnzsnz/ib-gateway:latest
+STATUS
+Restarting
+
+
+.> Appling settings to IBC's config.ini
+
+.> Settings directory NOT set, defaulting to: /home/ibgateway/Jts
+
+.> Setting timezone in /home/ibgateway/Jts/jts.ini
+
+/home/ibgateway/scripts/common.sh: line 32: /home/ibgateway/Jts/jts.ini.tmpl: No such file or directory
+
+*************************************************************************
+
+.> Starting IBC/IB gateway
+
+*************************************************************************
+
+.> Starting Xvfb server
+
+.> SSH tunnel disabled
+
+.> Usign default Java heap size 768m.
+
+.> Starting VNC server
+
+.> API_PORT set to: 4002
+
+.> SOCAT_PORT set to: 4004
+
+.> Appling settings to IBC's config.ini
+
+.> Settings directory NOT set, defaulting to: /home/ibgateway/Jts
+
+.> Setting timezone in /home/ibgateway/Jts/jts.ini
+
+/home/ibgateway/scripts/common.sh: line 32: /home/ibgateway/Jts/jts.ini.tmpl: No such file or directory
+
+*************************************************************************
+
+.> Starting IBC/IB gateway
+
+*************************************************************************
+
+.> Starting Xvfb server
+
+.> SSH tunnel disabled
+
+.> Usign default Java heap size 768m.
+
+.> Starting VNC server
+
+.> API_PORT set to: 4002
+
+.> SOCAT_PORT set to: 4004
+
+.> Appling settings to IBC's config.ini
+
+.> Settings directory NOT set, defaulting to: /home/ibgateway/Jts
+
+.> Setting timezone in /home/ibgateway/Jts/jts.ini
+
+/home/ibgateway/scripts/common.sh: line 32: /home/ibgateway/Jts/jts.ini.tmpl: No such file or directory

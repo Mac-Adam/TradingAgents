@@ -24,7 +24,6 @@ from tradingagents.agents.utils.agent_states import (
     RiskDebateState,
 )
 from tradingagents.dataflows.config import set_config
-from tradingagents.execution.alpaca_executor import AlpacaExecutor
 
 # Import the new abstract tool methods from agent_utils
 from tradingagents.agents.utils.agent_utils import (
@@ -104,7 +103,6 @@ class TradingAgentsGraph:
         self.quick_thinking_llm = quick_client.get_llm()
         
         self.memory_log = TradingMemoryLog(self.config)
-        self.alpaca_executor = AlpacaExecutor()
 
         # Create tool nodes
         self.tool_nodes = self._create_tool_nodes()
@@ -347,9 +345,6 @@ class TradingAgentsGraph:
             final_trade_decision=final_state["final_trade_decision"],
         )
         
-        # Note: Trade execution has been moved to a standalone EXECUTE_TRADES task
-        # self.alpaca_executor.execute_trade(company_name, final_state["final_trade_decision"])
-
         # Clear checkpoint on successful completion to avoid stale state.
         if self.config.get("checkpoint_enabled"):
             clear_checkpoint(

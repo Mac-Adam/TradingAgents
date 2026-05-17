@@ -60,13 +60,17 @@ export default function WalletView({ wallet, onBack, onDelete }: WalletViewProps
   // History (from API)
   const [history, setHistory] = useState<DecisionRecord[]>([]);
   // Report modal
-  const [viewingReport, setViewingReport] = useState<{ id: string; ticker: string; taskId?: string; isFailed?: boolean; isRunning?: boolean } | null>(null);
+  const [viewingReport, setViewingReport] = useState<{ id: string; ticker: string; taskId?: string; taskType: string; taskStatus: string } | null>(null);
 
   // Server time
   const [serverTime, setServerTime] = useState<string>('');
 
   // Delete confirm
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Nuclear reset confirm
+  const [isResetting, setIsResetting] = useState(false);
+  const [resetMsg, setResetMsg] = useState<string | null>(null);
 
   // ── Fetchers ────────────────────────────────
   const fetchAccount = useCallback(() => {
@@ -96,7 +100,7 @@ export default function WalletView({ wallet, onBack, onDelete }: WalletViewProps
   }, [wallet.id]);
 
   const fetchServerTime = useCallback(() => {
-    fetch(`${API}/api/server-time`).then(r => r.json()).then(d => setServerTime(d.utc)).catch(() => {});
+    fetch(`${API}/api/server-time`).then(r => r.json()).then(d => setServerTime(d.utc)).catch(() => { });
   }, []);
 
   useEffect(() => {
@@ -117,13 +121,25 @@ export default function WalletView({ wallet, onBack, onDelete }: WalletViewProps
     fetch(`${API}/api/runs/${wallet.id}`, { method: 'DELETE' }).then(() => onDelete()).catch(console.error);
   };
 
+  const handleResetQueue = () => {
+    fetch(`${API}/api/runs/${wallet.id}/tasks`, { method: 'DELETE' })
+      .then(r => r.json())
+      .then(() => {
+        setResetMsg('Queue cleared!');
+        setIsResetting(false);
+        fetchTasks();
+        setTimeout(() => setResetMsg(null), 3000);
+      })
+      .catch(console.error);
+  };
+
   const actionColor: Record<string, string> = {
-    Buy: 'bg-green-500/20 text-green-400 border-green-500/30',
-    Overweight: 'bg-green-500/15 text-green-300 border-green-500/20',
-    Hold: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
-    Underweight: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
-    Sell: 'bg-red-500/20 text-red-400 border-red-500/30',
-    FAILED: 'bg-red-500/30 text-red-300 border-red-500/40',
+    Buy: 'bg-gradient-to-r from-emerald-500/20 to-green-500/10 text-emerald-300 border-emerald-500/30',
+    Overweight: 'bg-gradient-to-r from-teal-500/20 to-emerald-500/10 text-teal-300 border-teal-500/30',
+    Hold: 'bg-gradient-to-r from-slate-600/20 to-slate-700/10 text-slate-300 border-slate-500/30',
+    Underweight: 'bg-gradient-to-r from-orange-500/20 to-amber-500/10 text-orange-300 border-orange-500/30',
+    Sell: 'bg-gradient-to-r from-rose-500/20 to-red-500/10 text-rose-300 border-rose-500/30',
+    FAILED: 'bg-gradient-to-r from-red-600/30 to-rose-600/20 text-red-300 border-red-500/40',
   };
 
   const statusBadge = (s: string) => {
@@ -147,14 +163,16 @@ export default function WalletView({ wallet, onBack, onDelete }: WalletViewProps
   };
 
   const getActionStyle = (action: string) => {
-    if (action.startsWith('Target ')) {
-      const val = parseInt(action.replace('Target ', '').replace('%', ''));
+    if (action.startsWith('Target Weight')) {
+      const val = parseInt(action.replace('Target Weight:', '').replace('%', ''));
       if (!isNaN(val)) {
-        if (val > 0) return 'bg-green-500/20 text-green-400 border-green-500/30';
-        if (val < 0) return 'bg-red-500/20 text-red-400 border-red-500/30';
-        return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
+        if (val > 0) return 'bg-gradient-to-r from-emerald-500/20 to-green-500/10 text-emerald-300 border-emerald-500/30';
+        if (val < 0) return 'bg-gradient-to-r from-rose-500/20 to-red-500/10 text-rose-300 border-rose-500/30';
+        return 'bg-gradient-to-r from-slate-600/20 to-slate-700/10 text-slate-300 border-slate-500/30';
       }
     }
+    if (action.startsWith('Executed ')) return 'bg-gradient-to-r from-purple-500/20 to-fuchsia-500/10 text-purple-300 border-purple-500/30';
+    if (action === 'No trades pending') return 'bg-gradient-to-r from-slate-600/20 to-slate-700/10 text-slate-400 border-slate-500/30';
     return actionColor[action] ?? 'bg-slate-600 text-white border-slate-500';
   };
 
@@ -164,7 +182,7 @@ export default function WalletView({ wallet, onBack, onDelete }: WalletViewProps
       acc.in += curr.stats.tokens_in || 0;
       acc.out += curr.stats.tokens_out || 0;
       acc.tools += curr.stats.tool_calls || 0;
-      
+
       if (curr.stats.quick) {
         acc.quick_in += curr.stats.quick.tokens_in || 0;
         acc.quick_out += curr.stats.quick.tokens_out || 0;
@@ -187,8 +205,8 @@ export default function WalletView({ wallet, onBack, onDelete }: WalletViewProps
           historyId={viewingReport.id}
           taskId={viewingReport.taskId}
           ticker={viewingReport.ticker}
-          isFailed={viewingReport.isFailed}
-          isRunning={viewingReport.isRunning}
+          taskType={viewingReport.taskType}
+          taskStatus={viewingReport.taskStatus}
           onClose={() => setViewingReport(null)}
         />
       )}
@@ -284,7 +302,7 @@ export default function WalletView({ wallet, onBack, onDelete }: WalletViewProps
                       <div><span className="text-slate-500 uppercase">Qty</span><p className="text-slate-200">{pos.qty}</p></div>
                       <div className="text-right"><span className="text-slate-500 uppercase">Entry</span><p className="text-slate-200">${fmt(pos.avg_entry_price)}</p></div>
                       {pos.current_price !== null && (<><div><span className="text-slate-500 uppercase">Price</span><p className="text-slate-200">${fmt(pos.current_price)}</p></div>
-                      {pos.unrealized_plpc !== null && <div className="text-right"><span className="text-slate-500 uppercase">P&L %</span><p className={plColor(pos.unrealized_plpc)}>{pos.unrealized_plpc >= 0 ? '+' : ''}{(pos.unrealized_plpc * 100).toFixed(2)}%</p></div>}</>)}
+                        {pos.unrealized_plpc !== null && <div className="text-right"><span className="text-slate-500 uppercase">P&L %</span><p className={plColor(pos.unrealized_plpc)}>{pos.unrealized_plpc >= 0 ? '+' : ''}{(pos.unrealized_plpc * 100).toFixed(2)}%</p></div>}</>)}
                     </div>
                   </div>
                 ))}
@@ -297,7 +315,38 @@ export default function WalletView({ wallet, onBack, onDelete }: WalletViewProps
         <div className="col-span-5 bg-slate-900 border border-slate-700 rounded-xl p-6 shadow-lg flex flex-col">
           <div className="flex justify-between items-center border-b border-slate-700 pb-2 mb-5">
             <h2 className="text-xl font-semibold text-white">Agent Dashboard</h2>
-            <span className="text-sm bg-accent/20 text-accent px-3 py-1 rounded-full font-bold">{tasks.length} Tasks</span>
+            <div className="flex items-center gap-2">
+              <span className="text-sm bg-accent/20 text-accent px-3 py-1 rounded-full font-bold">{tasks.length} Tasks</span>
+
+              {/* Nuclear reset */}
+              {resetMsg ? (
+                <span className="text-xs text-green-400 bg-green-500/10 border border-green-500/20 px-3 py-1 rounded-full font-bold animate-pulse">
+                  ✓ {resetMsg}
+                </span>
+              ) : isResetting ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-orange-400 font-bold">Wipe all tasks?</span>
+                  <button
+                    id="confirm-reset-queue"
+                    onClick={handleResetQueue}
+                    className="px-3 py-1 bg-orange-600 hover:bg-orange-500 text-white rounded-lg text-xs font-bold transition-colors"
+                  >Yes, nuke it</button>
+                  <button
+                    onClick={() => setIsResetting(false)}
+                    className="px-3 py-1 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-xs transition-colors"
+                  >Cancel</button>
+                </div>
+              ) : (
+                <button
+                  id="reset-task-queue"
+                  onClick={() => setIsResetting(true)}
+                  title="Nuclear option: clear all tasks including stuck/running ones"
+                  className="px-3 py-1 bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 hover:text-orange-300 border border-orange-500/30 hover:border-orange-400/50 rounded-lg text-xs font-bold transition-all duration-200"
+                >
+                  ☢ Reset Queue
+                </button>
+              )}
+            </div>
           </div>
 
           <TaskForm walletId={wallet.id} onTaskAdded={fetchTasks} />
@@ -305,20 +354,24 @@ export default function WalletView({ wallet, onBack, onDelete }: WalletViewProps
           {/* Task list */}
           <div className="flex-grow overflow-y-auto space-y-2.5 pr-1">
             {tasks.map(task => (
-              <div key={task.id} 
+              <div key={task.id}
                 onClick={() => {
-                  if (task.status === 'running') setViewingReport({ id: '', ticker: task.ticker, taskId: task.id, isRunning: true });
-                  else if (task.status === 'completed') setViewingReport({ id: '', ticker: task.ticker, taskId: task.id, isFailed: false });
-                  else if (task.status === 'failed') setViewingReport({ id: '', ticker: task.ticker, taskId: task.id, isFailed: true });
+                  if (task.status === 'running' || task.status === 'completed' || task.status === 'failed') {
+                    setViewingReport({ id: '', ticker: task.ticker, taskId: task.id, taskType: task.task_type, taskStatus: task.status });
+                  }
                 }}
-                className={`p-4 bg-slate-800 border rounded-lg transition-all flex justify-between items-center group ${
-                  task.status === 'running' ? 'cursor-pointer border-blue-500/30 hover:border-blue-400 shadow-[0_0_10px_rgba(59,130,246,0.1)]' : 
+                className={`p-4 bg-slate-800 border rounded-lg transition-all flex justify-between items-center group ${task.status === 'running' ? 'cursor-pointer border-blue-500/30 hover:border-blue-400 shadow-[0_0_10px_rgba(59,130,246,0.1)]' :
                   task.status === 'queued' ? 'border-slate-700 hover:border-slate-500' :
-                  'cursor-pointer border-slate-700 hover:border-slate-500'
-                }`}
+                    'cursor-pointer border-slate-700 hover:border-slate-500'
+                  }`}
               >
                 <div className="flex items-center gap-3">
                   <span className="text-white font-bold font-mono">{task.ticker}</span>
+                  {task.task_type && (
+                    <span className={`px-1.5 py-0.5 text-[10px] uppercase font-bold rounded border ${task.task_type === 'execution' ? 'bg-purple-500/20 text-purple-400 border-purple-500/30' : 'bg-blue-500/20 text-blue-400 border-blue-500/30'}`}>
+                      {task.task_type}
+                    </span>
+                  )}
                   {task.scheduled_at && <span className="text-slate-500 text-xs">⏱ {fmtTime(task.scheduled_at)}</span>}
                   {task.recurrence && <span className="text-blue-400 text-xs bg-blue-500/10 px-1.5 py-0.5 rounded">↻ {task.recurrence}</span>}
                 </div>
@@ -371,14 +424,19 @@ export default function WalletView({ wallet, onBack, onDelete }: WalletViewProps
               <div className="text-center py-10 text-slate-500 text-sm">No decisions yet. Queue a task to get started.</div>
             ) : history.map(d => (
               <div key={d.id}
-                onClick={() => setViewingReport({ id: d.id, ticker: d.ticker, taskId: d.task_id, isFailed: d.action === 'FAILED' })}
-                className={`p-4 border rounded-lg cursor-pointer hover:border-slate-500 transition-all ${
-                  d.action === 'FAILED' ? 'bg-red-950/30 border-red-500/30' : 'bg-slate-800 border-slate-700'
-                }`}
+                onClick={() => setViewingReport({ id: d.id, ticker: d.ticker, taskId: d.task_id, taskType: d.task_type || 'analysis', taskStatus: d.action === 'FAILED' ? 'failed' : 'completed' })}
+                className={`p-4 border rounded-lg cursor-pointer hover:border-slate-500 transition-all ${d.action === 'FAILED' ? 'bg-red-950/30 border-red-500/30' : 'bg-slate-800 border-slate-700'
+                  }`}
               >
                 <div className="flex items-center gap-3">
                   <span className={`px-2 py-0.5 text-xs font-bold rounded border ${getActionStyle(d.action)}`}>{d.action}</span>
                   <span className="text-white font-bold">{d.ticker}</span>
+                  {d.task_type && d.task_type !== 'analysis' && (
+                    <span className={`px-1.5 py-0.5 text-[10px] uppercase font-bold rounded border ${d.task_type === 'execution' ? 'bg-purple-500/20 text-purple-400 border-purple-500/30' : 'bg-slate-600 text-white border-slate-500'
+                      }`}>
+                      {d.task_type}
+                    </span>
+                  )}
                   <span className="text-slate-500 text-xs ml-auto">{fmtTime(d.timestamp)}</span>
                 </div>
                 {d.action === 'FAILED' && (

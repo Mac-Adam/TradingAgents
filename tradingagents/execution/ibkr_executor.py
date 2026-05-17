@@ -1,3 +1,4 @@
+import math
 import os
 import json
 import logging
@@ -38,10 +39,10 @@ class IBKRExecutor:
         """
         Expects a list of dicts: [{'ai_id': 'bot1', 'ticker': 'AAPL', 'decision': '...'}, ...]
         Calculates relative weights across all requested trades and executes them.
-        Any existing position not included in the trades_list is closed out.
+        Returns a list of tickers that were successfully sent to IBKR.
         """
         if not trades_list:
-            return
+            return []
 
         ai_id = trades_list[0]['ai_id']
         portfolio = db.get_ai_portfolio(ai_id)
@@ -58,13 +59,13 @@ class IBKRExecutor:
                 target_weights[trade['ticker']] = 0.0
 
         sum_abs_weights = sum(abs(w) for w in target_weights.values())
+        success_tickers = []
         
         # Connect to IBKR
         try:
             if not self.ib.isConnected():
                 self.ib.connect(self.host, self.port, clientId=self.client_id)
 
-            # We need to process all current positions plus new tickers
             all_tickers = set(portfolio["positions"].keys()).union(set(target_weights.keys()))
             
             for ticker in all_tickers:
@@ -87,33 +88,56 @@ class IBKRExecutor:
                 
                 value_to_trade = target_value - current_value
                 shares_to_trade = value_to_trade / current_price
-                
-                abs_shares = abs(shares_to_trade)
-                if abs_shares < 0.0001:
-                    logger.info(f"[{ai_id}] Target allocation already met for {ticker}.")
+
+                abs_shares_raw = abs(shares_to_trade)
+                abs_shares = math.floor(abs_shares_raw)
+
+                if abs_shares < 1:
                     continue
-                    
-                # Execute
+
                 action = 'BUY' if shares_to_trade > 0 else 'SELL'
                 
                 contract = Stock(ticker, 'SMART', 'USD')
                 self.ib.qualifyContracts(contract)
 
-                # OPG Time in Force is used for Market On Open orders
                 order = MarketOrder(action, abs_shares, tif='OPG')
                 order.orderRef = ai_id
-                
+
                 trade = self.ib.placeOrder(contract, order)
-                logger.info(f"[{ai_id}] Queued MOO {action} {abs_shares:.4f} {ticker} (orderRef: {ai_id})")
                 
-                # Update virtual state
-                portfolio["positions"][ticker] = current_qty + shares_to_trade
-                portfolio["cash"] -= value_to_trade
+                max_wait = 2.0
+                waited = 0.0
+                
+                while trade.orderStatus.status in ('ApiPending', 'PendingSubmit') and waited < max_wait:
+                    self.ib.sleep(0.1) 
+                    waited += 0.1
+
+                current_status = trade.orderStatus.status
+
+                # Now evaluate the resolved status
+                if current_status in ('Submitted', 'PreSubmitted', 'Filled'):
+                    actual_shares_signed = abs_shares if action == 'BUY' else -abs_shares
+                    actual_value_traded = actual_shares_signed * current_price
+
+                    portfolio["positions"][ticker] = current_qty + actual_shares_signed
+                    portfolio["cash"] -= actual_value_traded
+                    success_tickers.append(ticker)
+                    logger.info(f"[{ai_id}] Successfully placed {action} {abs_shares} {ticker}")
+                else:
+                    logger.warning(f"[{ai_id}] Order for {ticker} failed with status: {trade.orderStatus.status}")
             
-            db.save_ai_portfolio(ai_id, portfolio["cash"], portfolio["positions"])
+            # Only persist virtual portfolio if at least one order was accepted by IBKR
+            if success_tickers:
+                db.save_ai_portfolio(ai_id, portfolio["cash"], portfolio["positions"])
+                logger.info(f"[{ai_id}] Virtual portfolio updated for: {success_tickers}")
+            else:
+                logger.warning(f"[{ai_id}] No orders accepted by IBKR — virtual portfolio NOT changed.")
+            return success_tickers
 
         except Exception as e:
             logger.error(f"[{ai_id}] Error executing IBKR batch trades: {e}")
+            raise e
         finally:
             if self.ib.isConnected():
                 self.ib.disconnect()
+        return []  # fallback if exception before return

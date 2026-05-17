@@ -85,12 +85,12 @@ function App() {
 
   return (
     <div className="min-h-screen bg-background text-foreground p-8">
-      <div className="max-w-6xl mx-auto space-y-8">
+      <div className="max-w-[95%] mx-auto space-y-8">
 
         {/* Header */}
         <div className="p-8 rounded-2xl bg-slate-900 border border-slate-700 shadow-xl flex justify-between items-center">
           <div>
-            <h1 className="text-4xl font-bold bg-gradient-to-r from-accent to-purple-400 bg-clip-text text-transparent mb-4">
+            <h1 className="text-4xl font-bold bg-gradient-to-r from-accent to-purple-400 bg-clip-text text-transparent pb-2 py-1 leading-normal mb-2">
               TradingAgents Wallet Manager
             </h1>
             <p className="text-lg text-slate-200">
@@ -172,7 +172,7 @@ function App() {
                     className="p-4 rounded-lg bg-slate-800 border border-slate-700 hover:bg-slate-700 transition-colors flex items-center justify-between cursor-pointer group"
                   >
                     <div className="flex items-center space-x-6">
-                      <div className="text-2xl font-bold text-white max-w-[150px] truncate" title={run.wallet_name}>{run.wallet_name}</div>
+                      <div className="text-2xl font-bold text-white max-w-[400px] truncate" title={run.wallet_name}>{run.wallet_name}</div>
 
                       <div className="flex flex-col space-y-1">
                         <div className="text-sm text-slate-300 flex items-center">

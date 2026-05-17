@@ -52,5 +52,18 @@ services:
               count: 1
               capabilities: [gpu]
 
+  ib_gateway:
+    image: ghcr.io/gnzsnz/ib-gateway:latest
+    depends_on:
+      - tailscale
+    network_mode: service:tailscale
+    environment:
+      - TWS_USERID=username
+      - TWS_PASSWORD=password
+      - TRADING_MODE=paper
+      - VNC_SERVER_PASSWORD=vnc_password
+      - READ_ONLY_API=no
+    restart: unless-stopped
+
 volumes:
   ssh_keys:

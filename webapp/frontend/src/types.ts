@@ -19,7 +19,8 @@ export interface TaskRecord {
   report_path: string | null;
   error: string | null;
   decision: string | null;
-  stats?: Record<string, number> | null;
+  stats?: any | null;
+  task_type: string;
 }
 
 export interface DecisionRecord {
@@ -31,5 +32,6 @@ export interface DecisionRecord {
   rationale: string;
   full_report_path: string | null;
   timestamp: string;
-  stats?: Record<string, number> | null;
+  stats?: any | null;
+  task_type: string; // analysis | execution
 }

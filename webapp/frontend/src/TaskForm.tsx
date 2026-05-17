@@ -18,13 +18,17 @@ export default function TaskForm({ walletId, onTaskAdded }: Props) {
   const [scheduleMode, setScheduleMode] = useState<'asap' | 'scheduled'>('asap');
   const [scheduledAt, setScheduledAt] = useState(() => new Date().toISOString().slice(0, 16));
   const [recurring, setRecurring] = useState(false);
-  const [recurTime, setRecurTime] = useState('21:00');
   const [isQueueing, setIsQueueing] = useState(false);
+  const [taskType, setTaskType] = useState<'analysis' | 'execution'>('analysis');
 
   const handleSubmit = async () => {
-    if (!ticker.trim() || isQueueing) return;
+    if (isQueueing) return;
+    if (taskType === 'analysis' && !ticker.trim()) return;
 
-    const tickersToQueue = ticker.split(',').map(t => t.trim().toUpperCase()).filter(t => t);
+    const tickersToQueue = taskType === 'execution'
+      ? ['PORTFOLIO']
+      : ticker.split(',').map(t => t.trim().toUpperCase()).filter(t => t);
+
     if (tickersToQueue.length === 0) return;
 
     setIsQueueing(true);
@@ -32,9 +36,14 @@ export default function TaskForm({ walletId, onTaskAdded }: Props) {
       await Promise.all(tickersToQueue.map(t => {
         const body: Record<string, string | null> = {
           ticker: t,
+          task_type: taskType,
           schedule_mode: scheduleMode,
-          scheduled_at: scheduleMode === 'scheduled' && scheduledAt ? new Date(scheduledAt + ':00Z').toISOString() : null,
-          recurrence: scheduleMode === 'scheduled' && recurring ? `daily:${recurTime}` : null,
+          scheduled_at: scheduleMode === 'scheduled' && scheduledAt
+            ? new Date(scheduledAt + ':00Z').toISOString()
+            : null,
+          recurrence: scheduleMode === 'scheduled' && recurring && scheduledAt
+            ? `daily:${scheduledAt.slice(11, 16)}`
+            : null,
         };
         return fetch(`${API}/api/runs/${walletId}/tasks`, {
           method: 'POST',
@@ -53,9 +62,36 @@ export default function TaskForm({ walletId, onTaskAdded }: Props) {
 
   return (
     <div className="space-y-3 mb-5 p-4 bg-slate-800 border border-slate-700 rounded-lg">
-      <div className="flex flex-col gap-3">
+      {/* Task type selector — FIRST, controls everything below */}
+      <div className="flex items-center gap-1 bg-black rounded-lg p-1 w-fit">
+        <button
+          type="button"
+          onClick={() => setTaskType('analysis')}
+          className={`px-4 py-1.5 rounded-md text-sm font-semibold transition-all ${
+            taskType === 'analysis'
+              ? 'bg-blue-500/20 text-blue-400 shadow-sm'
+              : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          📊 Analysis
+        </button>
+        <button
+          type="button"
+          onClick={() => setTaskType('execution')}
+          className={`px-4 py-1.5 rounded-md text-sm font-semibold transition-all ${
+            taskType === 'execution'
+              ? 'bg-purple-500/20 text-purple-400 shadow-sm'
+              : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          ⚡ Execution
+        </button>
+      </div>
+
+      {/* Task input — different per type */}
+      {taskType === 'analysis' ? (
         <div className="flex gap-3">
-          <select 
+          <select
             onChange={(e) => {
               if (e.target.value) setTicker(e.target.value);
               e.target.value = "";
@@ -78,26 +114,51 @@ export default function TaskForm({ walletId, onTaskAdded }: Props) {
             disabled={isQueueing || !ticker.trim()}
             className="px-5 py-3 bg-accent hover:bg-accent/80 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-lg transition-colors shadow-lg shadow-accent/20 shrink-0"
           >
-            {isQueueing ? "Queueing..." : "Queue"}
+            {isQueueing ? "Queueing..." : scheduleMode === 'scheduled' ? "Schedule Analysis" : "Queue Analysis"}
           </button>
         </div>
-      </div>
+      ) : (
+        /* Execution flow — simple and distinct */
+        <div className="flex gap-3 items-center">
+          <div className="flex-grow bg-slate-900/50 border border-purple-500/20 rounded-lg p-3 text-slate-300 text-sm flex items-center gap-2">
+            <span className="text-purple-400">⚡</span>
+            Execute all pending trades queued by previous analyses.
+          </div>
+          <button
+            onClick={handleSubmit}
+            disabled={isQueueing}
+            className="px-5 py-3 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-lg transition-colors shadow-lg shadow-purple-600/20 shrink-0"
+          >
+            {isQueueing ? "Queueing..." : scheduleMode === 'scheduled' ? "Schedule Execution" : "Execute Trades"}
+          </button>
+        </div>
+      )}
 
-
-      {/* Schedule toggle */}
-      <div className="flex items-center gap-4">
+      {/* Schedule options — for both analysis and execution */}
+      <div className="flex items-center gap-4 pt-2 border-t border-slate-700/50">
+        <span className="text-slate-400 text-xs font-semibold uppercase">Schedule:</span>
         <label className="flex items-center gap-2 cursor-pointer">
-          <input type="radio" checked={scheduleMode === 'asap'} onChange={() => setScheduleMode('asap')} className="accent-accent" />
+          <input 
+            type="radio" 
+            checked={scheduleMode === 'asap'} 
+            onChange={() => setScheduleMode('asap')} 
+            className="accent-accent" 
+          />
           <span className="text-slate-300 text-sm">ASAP</span>
         </label>
         <label className="flex items-center gap-2 cursor-pointer">
-          <input type="radio" checked={scheduleMode === 'scheduled'} onChange={() => setScheduleMode('scheduled')} className="accent-accent" />
+          <input 
+            type="radio" 
+            checked={scheduleMode === 'scheduled'} 
+            onChange={() => setScheduleMode('scheduled')} 
+            className="accent-accent" 
+          />
           <span className="text-slate-300 text-sm">Scheduled</span>
         </label>
       </div>
 
       {scheduleMode === 'scheduled' && (
-        <div className="space-y-2 pl-2 border-l-2 border-accent/30">
+        <div className={`space-y-3 pl-3 border-l-2 ${taskType === 'execution' ? 'border-purple-500/50' : 'border-accent/50'} mt-2`}>
           <div className="flex items-end gap-3">
             <div className="flex-grow">
               <label className="text-slate-400 text-xs uppercase block mb-1">Run at (UTC)</label>
@@ -105,28 +166,23 @@ export default function TaskForm({ walletId, onTaskAdded }: Props) {
                 type="datetime-local"
                 value={scheduledAt}
                 onChange={e => setScheduledAt(e.target.value)}
-                className="w-full bg-black border border-slate-600 rounded p-2 text-white text-sm outline-none focus:border-accent"
+                className={`w-full bg-black border ${taskType === 'execution' ? 'border-purple-500/30 focus:border-purple-500' : 'border-slate-600 focus:border-accent'} rounded p-2 text-white text-sm outline-none transition-colors`}
               />
             </div>
             <div className="text-[10px] text-slate-500 font-mono mb-2 bg-slate-900 px-2 py-1 rounded border border-slate-700">
               Current UTC: {new Date().toISOString().slice(0, 16).replace('T', ' ')}
             </div>
           </div>
+          
           <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" checked={recurring} onChange={e => setRecurring(e.target.checked)} className="accent-accent" />
+            <input 
+              type="checkbox" 
+              checked={recurring} 
+              onChange={e => setRecurring(e.target.checked)} 
+              className="accent-accent" 
+            />
             <span className="text-slate-300 text-sm">Repeat daily</span>
           </label>
-          {recurring && (
-            <div>
-              <label className="text-slate-400 text-xs uppercase block mb-1">Daily at (UTC)</label>
-              <input
-                type="time"
-                value={recurTime}
-                onChange={e => setRecurTime(e.target.value)}
-                className="bg-black border border-slate-600 rounded p-2 text-white text-sm outline-none focus:border-accent"
-              />
-            </div>
-          )}
         </div>
       )}
     </div>

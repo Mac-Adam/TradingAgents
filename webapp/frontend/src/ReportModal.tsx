@@ -7,24 +7,27 @@ interface Props {
   historyId?: string;
   taskId?: string;
   ticker: string;
-  isFailed?: boolean;
-  isRunning?: boolean;
+  taskType: string;   // 'analysis' | 'execution' | ...
+  taskStatus: string; // 'running' | 'completed' | 'failed'
   onClose: () => void;
 }
 
-export default function ReportModal({ runId, historyId, taskId, ticker, isFailed, isRunning, onClose }: Props) {
+export default function ReportModal({ runId, historyId, taskId, ticker, taskType, taskStatus, onClose }: Props) {
   const [report, setReport] = useState<string | null>(null);
   const [logs, setLogs] = useState<string | null>(null);
   const [liveState, setLiveState] = useState<{ agent_status: Record<string, string>, messages: [string, string, string][] } | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'report' | 'logs'>(isFailed || isRunning ? 'logs' : 'report');
+
+  // Only analysis tasks that completed successfully have a report tab
+  const hasReport = taskType === 'analysis' && taskStatus === 'completed';
+  const [activeTab, setActiveTab] = useState<'report' | 'logs'>(hasReport ? 'report' : 'logs');
   const logsEndRef = useRef<HTMLDivElement>(null);
 
   // Initial fetch
   useEffect(() => {
     const promises: Promise<void>[] = [];
 
-    if (historyId && !isFailed && !isRunning) {
+    if (historyId && hasReport) {
       promises.push(
         fetch(`${API}/api/runs/${runId}/history/${historyId}/report`)
           .then(r => r.ok ? r.json() : Promise.reject())
@@ -43,16 +46,18 @@ export default function ReportModal({ runId, historyId, taskId, ticker, isFailed
     }
 
     Promise.allSettled(promises).then(() => setLoading(false));
-  }, [runId, historyId, taskId, isFailed, isRunning]);
+  }, [runId, historyId, taskId, hasReport]);
 
-  // Polling for live logs
+  // Polling for live logs (only when task is running)
   useEffect(() => {
-    if (isRunning && activeTab === 'logs' && taskId) {
+    if (taskStatus === 'running' && activeTab === 'logs' && taskId) {
       const interval = setInterval(() => {
-        fetch(`${API}/api/tasks/${taskId}/live`)
-          .then(r => r.ok ? r.json() : Promise.reject())
-          .then(d => setLiveState(d))
-          .catch(console.error);
+        if (taskType === 'analysis') {
+          fetch(`${API}/api/tasks/${taskId}/live`)
+            .then(r => r.ok ? r.json() : Promise.reject())
+            .then(d => setLiveState(d))
+            .catch(console.error);
+        }
         fetch(`${API}/api/tasks/${taskId}/logs`)
           .then(r => r.ok ? r.json() : Promise.reject())
           .then(d => setLogs(d.logs))
@@ -60,7 +65,7 @@ export default function ReportModal({ runId, historyId, taskId, ticker, isFailed
       }, 2000);
       return () => clearInterval(interval);
     }
-  }, [isRunning, activeTab, taskId]);
+  }, [taskStatus, taskType, activeTab, taskId]);
 
   const handleCancel = () => {
     if (!taskId || !runId) return;
@@ -78,6 +83,14 @@ export default function ReportModal({ runId, historyId, taskId, ticker, isFailed
     }
   }, [logs, activeTab]);
 
+  // Header title per task type + status
+  const headerTitle = (() => {
+    if (taskStatus === 'running') return `⏳ Running ${taskType}`;
+    if (taskStatus === 'failed') return `❌ Failed ${taskType}`;
+    if (taskType === 'execution') return '⚡ Trade Execution';
+    return '📊 Analysis Report';
+  })();
+
   return (
     <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-8" onClick={onClose}>
       <div
@@ -88,21 +101,26 @@ export default function ReportModal({ runId, historyId, taskId, ticker, isFailed
         <div className="flex items-center justify-between p-5 border-b border-slate-700">
           <div className="flex items-center gap-3">
             <h2 className="text-xl font-bold text-white">
-              {isRunning ? '⏳ Running' : isFailed ? '❌ Failed Task' : '📊 Report'}: {ticker}
+              {headerTitle}: {ticker}
             </h2>
-            {isFailed && (
+            <span className={`px-1.5 py-0.5 text-[10px] uppercase font-bold rounded border ${
+              taskType === 'execution' ? 'bg-purple-500/20 text-purple-400 border-purple-500/30' : 'bg-blue-500/20 text-blue-400 border-blue-500/30'
+            }`}>
+              {taskType}
+            </span>
+            {taskStatus === 'failed' && (
               <span className="px-2 py-0.5 bg-red-500/20 text-red-400 border border-red-500/30 rounded text-xs font-bold">
                 FAILED
               </span>
             )}
-            {isRunning && (
+            {taskStatus === 'running' && (
               <span className="px-2 py-0.5 bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded text-xs font-bold animate-pulse">
                 LIVE
               </span>
             )}
           </div>
           <div className="flex items-center gap-4">
-            {isRunning && (
+            {taskStatus === 'running' && (
               <button onClick={handleCancel} className="px-3 py-1.5 bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30 rounded text-sm font-bold transition-colors">
                 ⏹ Cancel Task
               </button>
@@ -113,28 +131,26 @@ export default function ReportModal({ runId, historyId, taskId, ticker, isFailed
 
         {/* Tabs */}
         <div className="flex border-b border-slate-700">
-          {!isFailed && !isRunning && (
+          {hasReport && (
             <button
               onClick={() => setActiveTab('report')}
-              className={`px-6 py-3 text-sm font-medium transition-colors ${
-                activeTab === 'report'
+              className={`px-6 py-3 text-sm font-medium transition-colors ${activeTab === 'report'
                   ? 'text-accent border-b-2 border-accent bg-accent/5'
                   : 'text-slate-400 hover:text-white'
-              }`}
+                }`}
             >
               📄 Report
             </button>
           )}
           <button
             onClick={() => setActiveTab('logs')}
-            className={`px-6 py-3 text-sm font-medium transition-colors flex items-center gap-2 ${
-              activeTab === 'logs'
+            className={`px-6 py-3 text-sm font-medium transition-colors flex items-center gap-2 ${activeTab === 'logs'
                 ? 'text-accent border-b-2 border-accent bg-accent/5'
                 : 'text-slate-400 hover:text-white'
-            }`}
+              }`}
           >
-            🔍 {isRunning ? 'Live Execution Logs' : 'Execution Logs'}
-            {isRunning && activeTab === 'logs' && <span className="w-2 h-2 rounded-full bg-accent animate-ping" />}
+            🔍 {taskStatus === 'running' ? 'Live Logs' : 'Logs'}
+            {taskStatus === 'running' && activeTab === 'logs' && <span className="w-2 h-2 rounded-full bg-accent animate-ping" />}
           </button>
         </div>
 
@@ -152,7 +168,8 @@ export default function ReportModal({ runId, historyId, taskId, ticker, isFailed
             )
           ) : (
             <div className="flex flex-col gap-6 flex-grow">
-              {isRunning && liveState && (
+              {/* Agent Status grid — only for analysis tasks that are running */}
+              {taskType === 'analysis' && taskStatus === 'running' && liveState && (
                 <div className="bg-slate-900 border border-slate-700 rounded-xl p-4 shrink-0">
                   <h3 className="text-slate-300 font-bold mb-3 border-b border-slate-800 pb-2">Agent Status</h3>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs font-mono">
@@ -169,11 +186,10 @@ export default function ReportModal({ runId, historyId, taskId, ticker, isFailed
                           return (
                             <div key={agent} className="flex items-center justify-between gap-2">
                               <span className="text-slate-300 truncate" title={agent}>{agent}</span>
-                              <span className={`px-1.5 py-0.5 rounded text-[10px] uppercase shrink-0 ${
-                                status === 'completed' ? 'bg-green-500/20 text-green-400 border border-green-500/30' :
-                                status === 'in_progress' ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 animate-pulse' :
-                                'bg-slate-800 text-slate-500 border border-slate-700'
-                              }`}>
+                              <span className={`px-1.5 py-0.5 rounded text-[10px] uppercase shrink-0 ${status === 'completed' ? 'bg-green-500/20 text-green-400 border border-green-500/30' :
+                                  status === 'in_progress' ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 animate-pulse' :
+                                    'bg-slate-800 text-slate-500 border border-slate-700'
+                                }`}>
                                 {status}
                               </span>
                             </div>
@@ -186,18 +202,19 @@ export default function ReportModal({ runId, historyId, taskId, ticker, isFailed
               )}
 
               <div className="relative flex-grow flex flex-col bg-slate-950 border border-slate-800 rounded-xl p-4">
-                <h3 className="text-slate-500 font-bold mb-3 border-b border-slate-800 pb-2 text-xs">Message Buffer {isRunning ? '(Live)' : '(Raw Logs)'}</h3>
+                <h3 className="text-slate-500 font-bold mb-3 border-b border-slate-800 pb-2 text-xs">
+                  {taskStatus === 'running' ? 'Live Logs' : 'Logs'}
+                </h3>
                 <div className="flex-grow overflow-x-auto pb-4">
-                  {isRunning && liveState?.messages && liveState.messages.length > 0 ? (
+                  {taskType === 'analysis' && taskStatus === 'running' && liveState?.messages && liveState.messages.length > 0 ? (
                     <div className="space-y-2 text-xs font-mono">
                       {liveState.messages.map((msg, i) => (
                         <div key={i} className="flex gap-3">
                           <span className="text-slate-500 shrink-0">[{msg[0]}]</span>
-                          <span className={`shrink-0 font-bold ${
-                            msg[1] === 'System' ? 'text-blue-400' :
-                            msg[1] === 'Agent' ? 'text-green-400' :
-                            msg[1] === 'Tool Call' ? 'text-yellow-400' : 'text-slate-400'
-                          }`}>[{msg[1]}]</span>
+                          <span className={`shrink-0 font-bold ${msg[1] === 'System' ? 'text-blue-400' :
+                              msg[1] === 'Agent' ? 'text-green-400' :
+                                msg[1] === 'Tool Call' ? 'text-yellow-400' : 'text-slate-400'
+                            }`}>[{msg[1]}]</span>
                           <span className="text-slate-300 break-words">{msg[2]}</span>
                         </div>
                       ))}

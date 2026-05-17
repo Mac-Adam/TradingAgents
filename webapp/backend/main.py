@@ -12,6 +12,7 @@ from task_executor import (
     get_history_for_run, get_report_text, get_task_logs,
     start_worker, LIVE_STATES, get_runs, add_run, remove_run
 )
+import db as _db
 
 logging.basicConfig(level=logging.INFO)
 
@@ -77,6 +78,7 @@ class TaskRequest(BaseModel):
     schedule_mode: str = "asap"  # "asap" or "scheduled"
     scheduled_at: Optional[str] = None  # ISO datetime
     recurrence: Optional[str] = None  # None or "daily:HH:MM"
+    task_type: str = "analysis"
 
 
 # ── Startup: launch worker ────────────────────────────────────────────────────
@@ -154,6 +156,33 @@ def get_account(run_id: str):
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
     try:
+        env = parse_env_file(run["env_file"])
+        if "IB_HOST" in env or "ALPACA_API_KEY" not in env:
+            import db
+            import yfinance as yf
+            portfolio = db.get_ai_portfolio(run_id)
+            cash = float(portfolio["cash"])
+            
+            portfolio_value = cash
+            for ticker, qty in portfolio["positions"].items():
+                if qty != 0:
+                    try:
+                        stock = yf.Ticker(ticker)
+                        price = float(stock.fast_info['lastPrice'])
+                        portfolio_value += qty * price
+                    except Exception as e:
+                        logging.warning(f"Failed to fetch price for {ticker}: {e}")
+
+            return {
+                "equity": portfolio_value,
+                "portfolio_value": portfolio_value,
+                "cash": cash,
+                "buying_power": cash,
+                "currency": "USD",
+                "account_number": run_id,
+                "status": "ACTIVE (IBKR VIRTUAL)",
+            }
+        
         client = get_alpaca_client(run["env_file"])
         acct = client.get_account()
         return {
@@ -168,7 +197,7 @@ def get_account(run_id: str):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Alpaca API error: {str(e)}")
+        raise HTTPException(status_code=502, detail=f"Broker API error: {str(e)}")
 
 
 @app.get("/api/runs/{run_id}/positions")
@@ -177,6 +206,35 @@ def get_positions(run_id: str):
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
     try:
+        env = parse_env_file(run["env_file"])
+        if "IB_HOST" in env or "ALPACA_API_KEY" not in env:
+            import db
+            import yfinance as yf
+            portfolio = db.get_ai_portfolio(run_id)
+            positions = []
+            
+            for ticker, qty in portfolio["positions"].items():
+                if qty != 0:
+                    price = None
+                    try:
+                        stock = yf.Ticker(ticker)
+                        price = float(stock.fast_info['lastPrice'])
+                    except Exception as e:
+                        logging.warning(f"Failed to fetch price for {ticker}: {e}")
+                    
+                    market_value = (qty * price) if price is not None else None
+                    positions.append({
+                        "symbol": ticker,
+                        "qty": float(qty),
+                        "avg_entry_price": 0.0,
+                        "current_price": price,
+                        "market_value": market_value,
+                        "unrealized_pl": 0.0,
+                        "unrealized_plpc": 0.0,
+                        "side": "long" if qty > 0 else "short",
+                    })
+            return positions
+
         client = get_alpaca_client(run["env_file"])
         positions = client.get_all_positions()
         return [
@@ -195,7 +253,7 @@ def get_positions(run_id: str):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Alpaca API error: {str(e)}")
+        raise HTTPException(status_code=502, detail=f"Broker API error: {str(e)}")
 
 
 # ── Task queue endpoints ──────────────────────────────────────────────────────
@@ -211,6 +269,7 @@ def create_task(run_id: str, req: TaskRequest):
         schedule_mode=req.schedule_mode,
         scheduled_at=req.scheduled_at,
         recurrence=req.recurrence,
+        task_type=req.task_type,
     )
     return task.to_dict()
 
@@ -232,6 +291,14 @@ def delete_task(run_id: str, task_id: str):
     if remove_task(task_id):
         return {"status": "ok"}
     raise HTTPException(status_code=400, detail="Task not found or not in queued state")
+
+
+@app.delete("/api/runs/{run_id}/tasks")
+def reset_task_queue(run_id: str):
+    """Nuclear option: delete ALL tasks for a run (queued, running, stuck, etc)."""
+    import db
+    db.clear_all_tasks(run_id)
+    return {"status": "ok", "message": "All tasks cleared"}
 
 
 # ── History endpoints ─────────────────────────────────────────────────────────

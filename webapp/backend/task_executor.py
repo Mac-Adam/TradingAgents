@@ -65,6 +65,7 @@ class DecisionRecord:
     full_report_path: Optional[str] = None
     timestamp: str = ""
     stats: Optional[Dict] = None
+    task_type: str = "analysis"
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -224,6 +225,12 @@ def _execute_task(task: TaskRecord):
     if getattr(task, "task_type", "analysis") == "execution":
         try:
             logger.info("Task %s: Running standalone Trade Executor for wallet %s", task.id, run["wallet_name"])
+            # ib_insync requires an asyncio event loop at import time (eventkit)
+            import asyncio
+            try:
+                asyncio.get_event_loop()
+            except RuntimeError:
+                asyncio.set_event_loop(asyncio.new_event_loop())
             from tradingagents.execution.ibkr_executor import IBKRExecutor
             executor = IBKRExecutor()
             
@@ -233,6 +240,19 @@ def _execute_task(task: TaskRecord):
                 logger.info("Task %s: No pending trades found", task.id)
                 task.status = "completed"
                 task.decision = "No trades pending"
+                history_entry = DecisionRecord(
+                    id=str(uuid.uuid4()),
+                    run_id=task.run_id,
+                    task_id=task.id,
+                    ticker="PORTFOLIO",
+                    action="No trades pending",
+                    rationale="No pending trades found for this portfolio.",
+                    full_report_path=None,
+                    timestamp=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                    stats=None,
+                    task_type="execution",
+                )
+                db.add_decision(history_entry.to_dict())
                 db.delete_task_force(task.id)
                 return
 
@@ -249,19 +269,48 @@ def _execute_task(task: TaskRecord):
                     trade_ids_to_clear.append(entry["id"])
             
             if trades_to_make:
-                executor.batch_execute(trades_to_make)
-                db.clear_pending_trades(run["id"], trade_ids_to_clear)
-            
+                accepted_tickers = executor.batch_execute(trades_to_make) or []
+
+                # Only clear pending trades for orders IBKR actually accepted.
+                # Rejected orders remain in pending_trades for the next execution attempt.
+                accepted_ids = [
+                    entry["id"]
+                    for entry in pending
+                    if entry["ticker"] in accepted_tickers
+                ]
+                if accepted_ids:
+                    db.clear_pending_trades(run["id"], accepted_ids)
+
+                rejected_count = len(trades_to_make) - len(accepted_tickers)
+                summary = f"Accepted {len(accepted_tickers)}/{len(trades_to_make)} orders"
+                if rejected_count > 0:
+                    summary += f" ({rejected_count} rejected by IBKR)"
+            else:
+                summary = "No trades to execute"
+
             task.status = "completed"
-            task.decision = f"Executed {len(trades_to_make)} trades"
-            logger.info("Task %s: Executed batch trades successfully", task.id)
+            task.decision = summary
+            logger.info("Task %s: %s", task.id, summary)
+            history_entry = DecisionRecord(
+                id=str(uuid.uuid4()),
+                run_id=task.run_id,
+                task_id=task.id,
+                ticker="PORTFOLIO",
+                action=summary,
+                rationale=summary,
+                full_report_path=None,
+                timestamp=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                stats=None,
+                task_type="execution",
+            )
+            db.add_decision(history_entry.to_dict())
             db.delete_task_force(task.id)
         except Exception as e:
             tb = traceback.format_exc()
             task.status = "failed"
             task.error = f"{type(e).__name__}: {str(e)}"
             logger.error("Task %s execution FAILED: %s\n%s", task.id, e, tb)
-            db.delete_task_force(task.id)
+            _push_failed_to_history(task)
         finally:
             _save_logs()
         return
@@ -405,7 +454,6 @@ def _execute_task(task: TaskRecord):
         graph.curr_state = final_state
         graph._log_state(trade_date, final_state)
         graph.memory_log.store_decision(task.ticker, trade_date, decision)
-        graph.alpaca_executor.execute_trade(task.ticker, decision)
 
         stats = stats_handler.get_stats()
         task.stats = stats
@@ -445,6 +493,7 @@ def _execute_task(task: TaskRecord):
             full_report_path=str(report_file),
             timestamp=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             stats=stats,
+            task_type="analysis",
         )
         db.add_decision(history_entry.to_dict())
         db.delete_task_force(task.id)
@@ -478,6 +527,7 @@ def _push_failed_to_history(task: TaskRecord):
         full_report_path=None,
         timestamp=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         stats=task.stats,
+        task_type=getattr(task, 'task_type', 'analysis'),
     )
     db.add_decision(history_entry.to_dict())
     db.delete_task_force(task.id)
@@ -529,11 +579,20 @@ def _handle_recurrence(task: TaskRecord):
                 schedule_mode="scheduled",
                 scheduled_at=next_run.isoformat().replace("+00:00", "Z"),
                 recurrence=task.recurrence,
+                task_type=task.task_type,
             )
             logger.info("Task %s: scheduled next recurrence at %s (next market day)", task.id, next_run.isoformat())
         except (ValueError, IndexError) as e:
             logger.warning("Failed to parse recurrence '%s': %s", task.recurrence, e)
 
+
+def _worker_thread_func(task: TaskRecord):
+    try:
+        _execute_task(task)
+    finally:
+        # Handle recurrence for completed tasks
+        if task.status == "completed":
+            _handle_recurrence(task)
 
 def _worker_loop():
     """
@@ -546,11 +605,9 @@ def _worker_loop():
             time.sleep(5)
             continue
 
-        _execute_task(task)
-
-        # Handle recurrence for completed tasks
-        if task.status == "completed":
-            _handle_recurrence(task)
+        # Spawn a thread to execute this task concurrently
+        t = threading.Thread(target=_worker_thread_func, args=(task,), daemon=True)
+        t.start()
 
         # Small cooldown between tasks
         time.sleep(1)

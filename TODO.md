@@ -25,6 +25,6 @@
 
 ## Architectural Notes
 - **Task Executor**: `webapp/backend/task_executor.py` runs a single daemon worker thread that processes tasks sequentially across all wallets. Env vars are loaded per-task via `dotenv(override=True)`. This means tasks from different wallets are safe but run one-at-a-time.
-- **Task Types**: `task_executor` now supports `task_type` (e.g., `analysis`, `execution`). The `analysis` task runs the LLM graph and pushes actionable decisions into the `pending_trades` SQLite table. The `execution` task pulls from `pending_trades` to execute batches on IBKR, ensuring scalability and decoupling of analysis and execution.
+- **Task Types**: `task_executor` supports multiple `task_type`s (e.g., `analysis`, `execution`). Both types of tasks can be scheduled immediately (ASAP) or for future execution (Scheduled / Daily Recurrence). The `analysis` task runs the LLM graph and pushes actionable decisions into the `pending_trades` SQLite table. The `execution` task pulls from `pending_trades` to execute batches on IBKR, ensuring scalability and decoupling of analysis and execution. When tasks are recurring, their specific `task_type` is correctly preserved across iterations.
 - **Reports**: Saved to `webapp/backend/reports/{run_id}/{TICKER_TIMESTAMP}/` using `cli.main.save_report_to_disk`.
 - **IBKR Executor**: Uses `webapp/backend/db.py` to maintain virtual sub-accounts (`ai_portfolios`) since paper IBKR accounts are limited to one per user. Trade orders are tagged via `orderRef` to track which AI placed them.

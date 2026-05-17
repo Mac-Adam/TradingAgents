@@ -81,6 +81,10 @@ def init_db():
                 conn.execute("ALTER TABLE tasks ADD COLUMN task_type TEXT DEFAULT 'analysis'")
             except sqlite3.OperationalError:
                 pass
+            try:
+                conn.execute("ALTER TABLE decision_history ADD COLUMN task_type TEXT DEFAULT 'analysis'")
+            except sqlite3.OperationalError:
+                pass
             conn.commit()
 
 # --- RUNS ---
@@ -184,6 +188,12 @@ def delete_task_force(task_id: str):
             conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
             conn.commit()
 
+def clear_all_tasks(run_id: str):
+    with _db_lock:
+        with get_conn() as conn:
+            conn.execute("DELETE FROM tasks WHERE run_id = ?", (run_id,))
+            conn.commit()
+
 def claim_next_task(now_iso: str) -> Optional[Dict]:
     """Atomically find the next ready task and mark it as 'running'."""
     with _db_lock:
@@ -194,6 +204,9 @@ def claim_next_task(now_iso: str) -> Optional[Dict]:
                 SELECT id FROM tasks 
                 WHERE status = 'queued' 
                   AND (scheduled_at IS NULL OR scheduled_at <= ?)
+                  AND run_id NOT IN (
+                      SELECT run_id FROM tasks WHERE status = 'running'
+                  )
                 ORDER BY created_at ASC
                 LIMIT 1
             """
@@ -215,14 +228,15 @@ def claim_next_task(now_iso: str) -> Optional[Dict]:
 # --- HISTORY ---
 def add_decision(decision: Dict):
     stats_str = json.dumps(decision.get('stats')) if decision.get('stats') else None
+    task_type = decision.get('task_type', 'analysis')
     with _db_lock:
         with get_conn() as conn:
             conn.execute('''
-                INSERT INTO decision_history (id, run_id, task_id, ticker, action, rationale, full_report_path, timestamp, stats)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO decision_history (id, run_id, task_id, ticker, action, rationale, full_report_path, timestamp, stats, task_type)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (decision['id'], decision['run_id'], decision['task_id'], decision['ticker'],
                   decision['action'], decision['rationale'], decision['full_report_path'],
-                  decision['timestamp'], stats_str))
+                  decision['timestamp'], stats_str, task_type))
             conn.commit()
 
 def get_history_for_run(run_id: str) -> List[Dict]:
