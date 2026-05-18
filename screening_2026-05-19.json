@@ -1,0 +1,75 @@
+{
+  "top_stocks": [
+    {
+      "ticker": "GOOGL",
+      "company": "Alphabet Inc.",
+      "sector": "Communication Services",
+      "rationale": "Wykazuje znakomite momentum cenowe w ostatnim miesiącu (17.64%) przy solidnym wskaźniku P/E (30.32) jak na spółkę wzrostową. Rekomendacja 'strong_buy' dodatkowo potwierdza potencjał wzrostu, napędzany innowacjami w AI i dominacją w reklamie cyfrowej.",
+      "confidence": 9.2
+    },
+    {
+      "ticker": "MSFT",
+      "company": "Microsoft Corporation",
+      "sector": "Technology",
+      "rationale": "Niezmiennie silna pozycja rynkowa, potwierdzona rekomendacją 'strong_buy' i atrakcyjnym P/E (25.23) jak na giganta technologicznego. Choć momentum 1M jest niższe (1.31%), stabilny wzrost w chmurze (Azure) i AI zapewnia solidne fundamenty.",
+      "confidence": 9.1
+    },
+    {
+      "ticker": "NVDA",
+      "company": "NVIDIA Corporation",
+      "sector": "Technology",
+      "rationale": "Lider w dziedzinie AI i układów graficznych, z silnym momentum cenowym (10.03%) i rekomendacją 'strong_buy'. Wysokie P/E (45.46) jest uzasadnione dominującą pozycją rynkową i perspektywami wzrostu w sektorze sztucznej inteligencji.",
+      "confidence": 9.0
+    },
+    {
+      "ticker": "INTU",
+      "company": "Intuit Inc.",
+      "sector": "Technology",
+      "rationale": "Silna rekomendacja 'strong_buy' w połączeniu ze stabilnym momentum cenowym (-0.41% w 1M) i rozsądnym wskaźnikiem P/E (26.23) wskazuje na stabilny wzrost i atrakcyjną wycenę w sektorze technologicznym. Firma jest liderem w oprogramowaniu finansowym.",
+      "confidence": 9.0
+    },
+    {
+      "ticker": "NXPI",
+      "company": "NXP Semiconductors N.V.",
+      "sector": "Technology",
+      "rationale": "Wykazuje bardzo silne momentum cenowe (+31.78% w 1M) przy atrakcyjnym wskaźniku P/E (27.89) jak na sektor technologiczny. Rekomendacja 'buy' dodatkowo wzmacnia potencjał wzrostu.",
+      "confidence": 9.0
+    },
+    {
+      "ticker": "PDD",
+      "company": "PDD Holdings Inc.",
+      "sector": "Consumer Cyclical",
+      "rationale": "Mimo niedawnego negatywnego momentum, niezwykle niski wskaźnik P/E w połączeniu z rekomendacją 'buy' sugeruje, że spółka jest znacznie niedowartościowana. Stanowi to silną okazję inwestycyjną z potencjałem odbicia.",
+      "confidence": 9.0
+    },
+    {
+      "ticker": "AMZN",
+      "company": "Amazon.com, Inc.",
+      "sector": "Consumer Cyclical",
+      "rationale": "Dobre momentum cenowe (6.68%) i rekomendacja 'strong_buy' wskazują na kontynuację pozytywnych trendów. P/E (31.72) jest rozsądne dla spółki o takim potencjale wzrostu w e-commerce i usługach chmurowych (AWS).",
+      "confidence": 8.9
+    },
+    {
+      "ticker": "AMD",
+      "company": "Advanced Micro Devices, Inc.",
+      "sector": "Technology",
+      "rationale": "Imponujące momentum cenowe (53.12% w miesiąc) wskazuje na silne zainteresowanie rynkowe, prawdopodobnie związane z rosnącym popytem na układy AI. Mimo wysokiego P/E (139.86), dynamika wzrostu w sektorze półprzewodników może utrzymać ten trend w perspektywie 3-6 miesięcy.",
+      "confidence": 8.8
+    },
+    {
+      "ticker": "AMAT",
+      "company": "Applied Materials, Inc.",
+      "sector": "Technology",
+      "rationale": "Rekomendacja 'strong_buy' oraz solidne momentum cenowe (5.6% w 1M) świadczą o silnym zainteresowaniu rynkowym. Jako kluczowy dostawca sprzętu dla producentów półprzewodników, AMAT korzysta z długoterminowych trendów w technologii.",
+      "confidence": 8.8
+    },
+    {
+      "ticker": "CSCO",
+      "company": "Cisco Systems, Inc.",
+      "sector": "Technology",
+      "rationale": "Bardzo silne momentum cenowe (35.54%) w połączeniu z umiarkowanym wskaźnikiem P/E (39.63) i rekomendacją 'buy'. Spółka korzysta na inwestycjach w infrastrukturę sieciową i cyberbezpieczeństwo, co może napędzać dalsze wzrosty.",
+      "confidence": 8.7
+    }
+  ],
+  "market_summary": "Rynek w ostatnich tygodniach charakteryzuje się silnym momentum w sektorze technologicznym, szczególnie w obszarach związanych z AI i półprzewodnikami. Widoczne są zarówno spółki z dynamicznym wzrostem cen, jak i te, które po krótkoterminowych spadkach oferują atrakcyjne wskaźniki P/E i rekomendacje 'strong_buy', sugerując potencjalne okazje do zakupu na dołku. Ogólnie, sentyment wydaje się sprzyjać innowacyjnym technologiom i spółkom z solidnymi fundamentami."
+}
