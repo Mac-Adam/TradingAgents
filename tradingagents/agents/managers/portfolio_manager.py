@@ -38,37 +38,32 @@ def create_portfolio_manager(llm):
             if past_context
             else ""
         )
-        # Prompt construction
-        prompt = f"""As the Portfolio Manager, synthesize the risk analysts' debate and deliver the final trading decision.
-
-{instrument_context}
-
----
-
-**Target Allocation**:
-Specify the exact target weight of the overall portfolio for this instrument.
-- Range: -10 to 10
-- -10 represents maximum short exposure.
-- 10 represents maximum long exposure.
-- 0 represents no position (exit entirely).
-- Adjust sizing based on conviction and risk tolerance.
-- Make sure this field contains a single number in range -10 to 10
-
-**Context:**
-- Research Manager's investment plan: **{research_plan}**
-- Trader's transaction proposal: **{trader_plan}**
-{lessons_line}
-**Risk Analysts Debate History:**
-{history}
-
----
-
-Be decisive and ground every conclusion in specific evidence from the analysts.{get_language_instruction()}"""
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "As the Portfolio Manager, synthesize the risk analysts' debate and "
+                    "deliver the final trading decision. Be decisive and ground every "
+                    f"conclusion in specific evidence from the analysts.{get_language_instruction()}"
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    f"{instrument_context}\n\n"
+                    f"**Context:**\n"
+                    f"- Research Manager's investment plan: **{research_plan}**\n"
+                    f"- Trader's transaction proposal: **{trader_plan}**\n"
+                    f"{lessons_line}"
+                    f"**Risk Analysts Debate History:**\n{history}"
+                ),
+            },
+        ]
 
         final_trade_decision = invoke_structured_or_freetext(
             structured_llm,
             llm,
-            prompt,
+            messages,
             render_pm_decision,
             "Portfolio Manager",
         )

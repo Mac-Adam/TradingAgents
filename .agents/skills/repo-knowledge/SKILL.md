@@ -18,6 +18,12 @@ When you start working on a task in the `TradingAgents` repository, you MUST fol
 2. **Drill Down**: Based on the task, identify the relevant subsystem (`tradingagents`, `cli`, `scripts`, `tests`, `assets`).
 3. **Read Local Context**: Read the `agent.md` file located inside the specific subsystem folder you need to work in (e.g., if you are editing core logic, read `/app/TradingAgents/tradingagents/agent.md`).
 4. **Follow Conventions**: Adhere to the design patterns and instructions outlined in those documentation files.
-5. **Update Context As You Go**: When you introduce new modules, features, or architectural changes, you MUST automatically update the relevant `agent.md` files and `TODO.md` to keep the repository knowledge current without being explicitly asked.
+5. **Update Context As You Go**: When you introduce new modules, features, database schema changes, or architectural changes, you MUST automatically update the relevant `agent.md` files and `TODO.md` to keep the repository knowledge current without being explicitly asked.
 
-By reading these `agent.md` files, you will gain immediate, accurate context about the project without needing to blindly search through the repository.
+## Database Interaction Rules
+
+When interacting with the backend SQLite database (`/app/TradingAgents/webapp/backend/backend.db`):
+- **DO NOT** assume the `sqlite3` CLI tool is available (it may return `command not found`).
+- **ALWAYS** use Python scripts or one-liners via `python3 -c "import sqlite3; ..."` to query or modify the database reliably on your first attempt.
+- **NEVER** use regex or simple file parsing (like `cat`) to extract data from `.db` or `.json` persistence files.
+- If you change the database schema or location, you **MUST** update this skill and the `webapp/agent.md` file immediately to reflect the new structure.

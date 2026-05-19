@@ -19,15 +19,15 @@ export default function TaskForm({ walletId, onTaskAdded }: Props) {
   const [scheduledAt, setScheduledAt] = useState(() => new Date().toISOString().slice(0, 16));
   const [recurring, setRecurring] = useState(false);
   const [isQueueing, setIsQueueing] = useState(false);
-  const [taskType, setTaskType] = useState<'analysis' | 'execution'>('analysis');
+  const [taskType, setTaskType] = useState<'analysis' | 'execution' | 'bookkeeping'>('analysis');
 
   const handleSubmit = async () => {
     if (isQueueing) return;
     if (taskType === 'analysis' && !ticker.trim()) return;
 
-    const tickersToQueue = taskType === 'execution'
-      ? ['PORTFOLIO']
-      : ticker.split(',').map(t => t.trim().toUpperCase()).filter(t => t);
+    const tickersToQueue = taskType === 'analysis'
+      ? ticker.split(',').map(t => t.trim().toUpperCase()).filter(t => t)
+      : ['PORTFOLIO'];
 
     if (tickersToQueue.length === 0) return;
 
@@ -86,6 +86,17 @@ export default function TaskForm({ walletId, onTaskAdded }: Props) {
         >
           ⚡ Execution
         </button>
+        <button
+          type="button"
+          onClick={() => setTaskType('bookkeeping')}
+          className={`px-4 py-1.5 rounded-md text-sm font-semibold transition-all ${
+            taskType === 'bookkeeping'
+              ? 'bg-amber-500/20 text-amber-400 shadow-sm'
+              : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          📚 Bookkeeping
+        </button>
       </div>
 
       {/* Task input — different per type */}
@@ -117,7 +128,7 @@ export default function TaskForm({ walletId, onTaskAdded }: Props) {
             {isQueueing ? "Queueing..." : scheduleMode === 'scheduled' ? "Schedule Analysis" : "Queue Analysis"}
           </button>
         </div>
-      ) : (
+      ) : taskType === 'execution' ? (
         /* Execution flow — simple and distinct */
         <div className="flex gap-3 items-center">
           <div className="flex-grow bg-slate-900/50 border border-purple-500/20 rounded-lg p-3 text-slate-300 text-sm flex items-center gap-2">
@@ -132,9 +143,24 @@ export default function TaskForm({ walletId, onTaskAdded }: Props) {
             {isQueueing ? "Queueing..." : scheduleMode === 'scheduled' ? "Schedule Execution" : "Execute Trades"}
           </button>
         </div>
+      ) : (
+        /* Bookkeeping flow */
+        <div className="flex gap-3 items-center">
+          <div className="flex-grow bg-slate-900/50 border border-amber-500/20 rounded-lg p-3 text-slate-300 text-sm flex items-center gap-2">
+            <span className="text-amber-400">📚</span>
+            Reconcile virtual portfolio positions and cash with actual IBKR fills and commissions.
+          </div>
+          <button
+            onClick={handleSubmit}
+            disabled={isQueueing}
+            className="px-5 py-3 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-lg transition-colors shadow-lg shadow-amber-600/20 shrink-0"
+          >
+            {isQueueing ? "Queueing..." : scheduleMode === 'scheduled' ? "Schedule Bookkeeping" : "Run Bookkeeper"}
+          </button>
+        </div>
       )}
 
-      {/* Schedule options — for both analysis and execution */}
+      {/* Schedule options — for all types */}
       <div className="flex items-center gap-4 pt-2 border-t border-slate-700/50">
         <span className="text-slate-400 text-xs font-semibold uppercase">Schedule:</span>
         <label className="flex items-center gap-2 cursor-pointer">
@@ -158,7 +184,7 @@ export default function TaskForm({ walletId, onTaskAdded }: Props) {
       </div>
 
       {scheduleMode === 'scheduled' && (
-        <div className={`space-y-3 pl-3 border-l-2 ${taskType === 'execution' ? 'border-purple-500/50' : 'border-accent/50'} mt-2`}>
+        <div className={`space-y-3 pl-3 border-l-2 ${taskType === 'execution' ? 'border-purple-500/50' : taskType === 'bookkeeping' ? 'border-amber-500/50' : 'border-accent/50'} mt-2`}>
           <div className="flex items-end gap-3">
             <div className="flex-grow">
               <label className="text-slate-400 text-xs uppercase block mb-1">Run at (UTC)</label>
@@ -166,7 +192,7 @@ export default function TaskForm({ walletId, onTaskAdded }: Props) {
                 type="datetime-local"
                 value={scheduledAt}
                 onChange={e => setScheduledAt(e.target.value)}
-                className={`w-full bg-black border ${taskType === 'execution' ? 'border-purple-500/30 focus:border-purple-500' : 'border-slate-600 focus:border-accent'} rounded p-2 text-white text-sm outline-none transition-colors`}
+                className={`w-full bg-black border ${taskType === 'execution' ? 'border-purple-500/30 focus:border-purple-500' : taskType === 'bookkeeping' ? 'border-amber-500/30 focus:border-amber-500' : 'border-slate-600 focus:border-accent'} rounded p-2 text-white text-sm outline-none transition-colors`}
               />
             </div>
             <div className="text-[10px] text-slate-500 font-mono mb-2 bg-slate-900 px-2 py-1 rounded border border-slate-700">

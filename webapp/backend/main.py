@@ -150,6 +150,22 @@ def delete_run(run_id: str):
 
 # ── Alpaca live-data endpoints ─────────────────────────────────────────────────
 
+def normalize_positions(positions: dict) -> dict:
+    normalized = {}
+    for ticker, val in positions.items():
+        if isinstance(val, dict):
+            normalized[ticker] = {
+                "qty": float(val.get("qty", 0.0)),
+                "avg_entry_price": float(val.get("avg_entry_price", 0.0))
+            }
+        else:
+            normalized[ticker] = {
+                "qty": float(val or 0.0),
+                "avg_entry_price": 0.0
+            }
+    return normalized
+
+
 @app.get("/api/runs/{run_id}/account")
 def get_account(run_id: str):
     run = next((r for r in get_runs() if r["id"] == run_id), None)
@@ -158,16 +174,16 @@ def get_account(run_id: str):
     try:
         env = parse_env_file(run["env_file"])
         if "IB_HOST" in env or "ALPACA_API_KEY" not in env:
-            import db
-            import yfinance as yf
-            portfolio = db.get_ai_portfolio(run_id)
+            portfolio = _db.get_ai_portfolio(run_id)
             cash = float(portfolio["cash"])
             
             portfolio_value = cash
-            for ticker, qty in portfolio["positions"].items():
+            positions = normalize_positions(portfolio["positions"])
+            for ticker, info in positions.items():
+                qty = info["qty"]
                 if qty != 0:
                     try:
-                        stock = yf.Ticker(ticker)
+                        stock = yf.Ticker(ticker.replace('.', '-'))
                         price = float(stock.fast_info['lastPrice'])
                         portfolio_value += qty * price
                     except Exception as e:
@@ -208,29 +224,46 @@ def get_positions(run_id: str):
     try:
         env = parse_env_file(run["env_file"])
         if "IB_HOST" in env or "ALPACA_API_KEY" not in env:
-            import db
             import yfinance as yf
-            portfolio = db.get_ai_portfolio(run_id)
+            portfolio = _db.get_ai_portfolio(run_id)
             positions = []
+            normalized = normalize_positions(portfolio["positions"])
             
-            for ticker, qty in portfolio["positions"].items():
+            for ticker, info in normalized.items():
+                qty = info["qty"]
+                avg_entry_price = info["avg_entry_price"]
                 if qty != 0:
                     price = None
                     try:
-                        stock = yf.Ticker(ticker)
+                        stock = yf.Ticker(ticker.replace('.', '-'))
                         price = float(stock.fast_info['lastPrice'])
                     except Exception as e:
                         logging.warning(f"Failed to fetch price for {ticker}: {e}")
                     
                     market_value = (qty * price) if price is not None else None
+                    
+                    unrealized_pl = None
+                    unrealized_plpc = None
+                    if price is not None:
+                        if avg_entry_price > 0:
+                            if qty > 0:
+                                unrealized_pl = qty * (price - avg_entry_price)
+                                unrealized_plpc = (price - avg_entry_price) / avg_entry_price
+                            else:
+                                unrealized_pl = qty * (price - avg_entry_price)
+                                unrealized_plpc = (avg_entry_price - price) / avg_entry_price
+                        else:
+                            unrealized_pl = 0.0
+                            unrealized_plpc = 0.0
+
                     positions.append({
                         "symbol": ticker,
                         "qty": float(qty),
-                        "avg_entry_price": 0.0,
+                        "avg_entry_price": avg_entry_price,
                         "current_price": price,
                         "market_value": market_value,
-                        "unrealized_pl": 0.0,
-                        "unrealized_plpc": 0.0,
+                        "unrealized_pl": unrealized_pl,
+                        "unrealized_plpc": unrealized_plpc,
                         "side": "long" if qty > 0 else "short",
                     })
             return positions
@@ -254,6 +287,17 @@ def get_positions(run_id: str):
         raise
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Broker API error: {str(e)}")
+
+
+@app.get("/api/runs/{run_id}/ledger")
+def get_ledger(run_id: str):
+    run = next((r for r in get_runs() if r["id"] == run_id), None)
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+    try:
+        return _db.get_ledger_entries(run_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 
 # ── Task queue endpoints ──────────────────────────────────────────────────────

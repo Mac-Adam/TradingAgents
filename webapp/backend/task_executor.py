@@ -222,6 +222,47 @@ def _execute_task(task: TaskRecord):
                 task.id, config.get("llm_provider"), config.get("deep_think_llm"),
                 config.get("quick_think_llm"), config.get("backend_url"))
 
+    if getattr(task, "task_type", "analysis") == "bookkeeping":
+        try:
+            logger.info("Task %s: Running Bookkeeper for wallet %s", task.id, run["wallet_name"])
+            import asyncio
+            try:
+                asyncio.get_event_loop()
+            except RuntimeError:
+                asyncio.set_event_loop(asyncio.new_event_loop())
+            from tradingagents.execution.ibkr_executor import IBKRExecutor
+            executor = IBKRExecutor()
+            
+            reconciled_count = executor.reconcile_portfolio(run["id"])
+            summary = f"Reconciled {reconciled_count} trades from IBKR executions"
+            
+            task.status = "completed"
+            task.decision = summary
+            logger.info("Task %s: %s", task.id, summary)
+            history_entry = DecisionRecord(
+                id=str(uuid.uuid4()),
+                run_id=task.run_id,
+                task_id=task.id,
+                ticker="PORTFOLIO",
+                action="Bookkeeping",
+                rationale=summary,
+                full_report_path=None,
+                timestamp=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                stats=None,
+                task_type="bookkeeping",
+            )
+            db.add_decision(history_entry.to_dict())
+            db.delete_task_force(task.id)
+        except Exception as e:
+            tb = traceback.format_exc()
+            task.status = "failed"
+            task.error = f"{type(e).__name__}: {str(e)}"
+            logger.error("Task %s bookkeeping FAILED: %s\n%s", task.id, e, tb)
+            _push_failed_to_history(task)
+        finally:
+            _save_logs()
+        return
+
     if getattr(task, "task_type", "analysis") == "execution":
         try:
             logger.info("Task %s: Running standalone Trade Executor for wallet %s", task.id, run["wallet_name"])

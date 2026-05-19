@@ -178,9 +178,9 @@ class PortfolioDecision(BaseModel):
     """
 
     target_weight: int = Field(
-        ge=-10,
-        le=10,
-        description="Target weight of the instrument relative to others (-10 to 10). -10 means maximum short weight, 10 means maximum long weight, 0 means no position. This is a relative weight, not a percentage.",
+        ge=-3,
+        le=3,
+        description="Target weight of the instrument relative to others (-3 to 3). -3 means maximum short weight, 3 means maximum long weight, 0 means no position. This is a relative weight, not a percentage.",
     )
     executive_summary: str = Field(
         description=(

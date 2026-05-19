@@ -205,7 +205,7 @@ class TradingAgentsGraph:
             end = start + timedelta(days=holding_days + 7)  # buffer for weekends/holidays
             end_str = end.strftime("%Y-%m-%d")
 
-            stock = yf.Ticker(ticker).history(start=trade_date, end=end_str)
+            stock = yf.Ticker(ticker.replace('.', '-')).history(start=trade_date, end=end_str)
             spy = yf.Ticker("SPY").history(start=trade_date, end=end_str)
 
             if len(stock) < 2 or len(spy) < 2:

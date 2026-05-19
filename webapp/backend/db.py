@@ -77,6 +77,21 @@ def init_db():
                     created_at TEXT
                 )
             ''')
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS trade_ledger (
+                    id TEXT PRIMARY KEY,
+                    run_id TEXT,
+                    ticker TEXT,
+                    action TEXT,
+                    qty REAL,
+                    estimated_price REAL,
+                    execution_price REAL,
+                    commission REAL,
+                    status TEXT,
+                    ib_execution_id TEXT,
+                    timestamp TEXT
+                )
+            ''')
             try:
                 conn.execute("ALTER TABLE tasks ADD COLUMN task_type TEXT DEFAULT 'analysis'")
             except sqlite3.OperationalError:
@@ -333,4 +348,60 @@ def clear_pending_trades(run_id: str, ids: List[str] = None):
                 conn.execute(f"DELETE FROM pending_trades WHERE run_id = ? AND id IN ({placeholders})", [run_id] + ids)
             else:
                 conn.execute("DELETE FROM pending_trades WHERE run_id = ?", (run_id,))
+            conn.commit()
+
+# --- TRADE LEDGER ---
+def add_ledger_entry(entry: Dict):
+    with _db_lock:
+        with get_conn() as conn:
+            conn.execute('''
+                INSERT INTO trade_ledger (id, run_id, ticker, action, qty, estimated_price, execution_price, commission, status, ib_execution_id, timestamp)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                entry["id"],
+                entry["run_id"],
+                entry["ticker"],
+                entry["action"],
+                float(entry["qty"]),
+                float(entry["estimated_price"]),
+                float(entry["execution_price"]) if entry.get("execution_price") is not None else None,
+                float(entry.get("commission", 0.0) or 0.0),
+                entry["status"],
+                entry.get("ib_execution_id"),
+                entry["timestamp"]
+            ))
+            conn.commit()
+
+def get_ledger_entries(run_id: str) -> List[Dict]:
+    with _db_lock:
+        with get_conn() as conn:
+            rows = conn.execute("SELECT * FROM trade_ledger WHERE run_id = ? ORDER BY timestamp ASC", (run_id,)).fetchall()
+            return [dict(row) for row in rows]
+
+def get_ledger_entry_by_execution_id(exec_id: str) -> Optional[Dict]:
+    with _db_lock:
+        with get_conn() as conn:
+            row = conn.execute("SELECT * FROM trade_ledger WHERE ib_execution_id = ?", (exec_id,)).fetchone()
+            if row:
+                return dict(row)
+            return None
+
+def find_matching_estimated_trade(run_id: str, ticker: str, qty_change: float) -> Optional[Dict]:
+    with _db_lock:
+        with get_conn() as conn:
+            rows = conn.execute("SELECT * FROM trade_ledger WHERE run_id = ? AND ticker = ? AND status = 'estimated' ORDER BY timestamp ASC", (run_id, ticker)).fetchall()
+            for row in rows:
+                row_qty = float(row["qty"])
+                if (row_qty > 0 and qty_change > 0) or (row_qty < 0 and qty_change < 0):
+                    return dict(row)
+            return None
+
+def update_ledger_entry(entry_id: str, status: str, execution_price: float, commission: float, ib_execution_id: str, timestamp: str):
+    with _db_lock:
+        with get_conn() as conn:
+            conn.execute('''
+                UPDATE trade_ledger
+                SET status = ?, execution_price = ?, commission = ?, ib_execution_id = ?, timestamp = ?
+                WHERE id = ?
+            ''', (status, execution_price, commission, ib_execution_id, timestamp, entry_id))
             conn.commit()

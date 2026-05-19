@@ -65,6 +65,23 @@ export default function WalletView({ wallet, onBack, onDelete }: WalletViewProps
   // Server time
   const [serverTime, setServerTime] = useState<string>('');
 
+  // Right column tab
+  const [rightTab, setRightTab] = useState<'decisions' | 'ledger'>('decisions');
+  interface LedgerEntry {
+    id: string;
+    run_id: string;
+    ticker: string;
+    action: string;
+    qty: number;
+    estimated_price: number;
+    execution_price: number | null;
+    commission: number;
+    status: string;
+    ib_execution_id: string | null;
+    timestamp: string;
+  }
+  const [ledger, setLedger] = useState<LedgerEntry[]>([]);
+
   // Delete confirm
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -103,11 +120,15 @@ export default function WalletView({ wallet, onBack, onDelete }: WalletViewProps
     fetch(`${API}/api/server-time`).then(r => r.json()).then(d => setServerTime(d.utc)).catch(() => { });
   }, []);
 
+  const fetchLedger = useCallback(() => {
+    fetch(`${API}/api/runs/${wallet.id}/ledger`).then(r => r.json()).then(setLedger).catch(console.error);
+  }, [wallet.id]);
+
   useEffect(() => {
-    fetchAccount(); fetchPositions(); fetchTasks(); fetchHistory(); fetchServerTime();
-    const iv = setInterval(() => { fetchTasks(); fetchHistory(); fetchServerTime(); }, 10_000);
+    fetchAccount(); fetchPositions(); fetchTasks(); fetchHistory(); fetchServerTime(); fetchLedger();
+    const iv = setInterval(() => { fetchTasks(); fetchHistory(); fetchServerTime(); fetchLedger(); }, 10_000);
     return () => clearInterval(iv);
-  }, [fetchAccount, fetchPositions, fetchTasks, fetchHistory, fetchServerTime]);
+  }, [fetchAccount, fetchPositions, fetchTasks, fetchHistory, fetchServerTime, fetchLedger]);
 
   // ── Helpers ─────────────────────────────────
   const fmt = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -395,14 +416,29 @@ export default function WalletView({ wallet, onBack, onDelete }: WalletViewProps
           </div>
         </div>
 
-        {/* RIGHT: Decision History */}
+        {/* RIGHT: Decision History / Trade Ledger */}
         <div className="col-span-4 bg-slate-900 border border-slate-700 rounded-xl p-6 shadow-lg flex flex-col">
           <div className="flex flex-col border-b border-slate-700 pb-4 mb-5 space-y-3">
             <div className="flex justify-between items-center">
-              <h2 className="text-xl font-semibold text-white">Decision History</h2>
-              <span className="text-xs text-slate-500 font-medium">Click for report</span>
+              <div className="flex gap-4">
+                <button
+                  onClick={() => setRightTab('decisions')}
+                  className={`text-lg font-semibold transition-colors ${rightTab === 'decisions' ? 'text-white border-b-2 border-accent pb-1' : 'text-slate-400 hover:text-slate-200'}`}
+                >
+                  Decision History
+                </button>
+                <button
+                  onClick={() => setRightTab('ledger')}
+                  className={`text-lg font-semibold transition-colors ${rightTab === 'ledger' ? 'text-white border-b-2 border-accent pb-1' : 'text-slate-400 hover:text-slate-200'}`}
+                >
+                  Trade Ledger
+                </button>
+              </div>
+              <span className="text-xs text-slate-500 font-medium">
+                {rightTab === 'decisions' ? 'Click for report' : 'Confirmed fills'}
+              </span>
             </div>
-            {history.length > 0 && (
+            {rightTab === 'decisions' && history.length > 0 && (
               <div className="flex flex-col gap-2 bg-slate-800/50 p-3 rounded-lg border border-slate-700/50">
                 <div className="flex gap-4 text-xs font-mono text-slate-300">
                   <span title="Total LLM Calls">🧠 {totalStats.calls}</span>
@@ -420,46 +456,89 @@ export default function WalletView({ wallet, onBack, onDelete }: WalletViewProps
             )}
           </div>
           <div className="flex-grow overflow-y-auto space-y-2.5 pr-1">
-            {history.length === 0 ? (
-              <div className="text-center py-10 text-slate-500 text-sm">No decisions yet. Queue a task to get started.</div>
-            ) : history.map(d => (
-              <div key={d.id}
-                onClick={() => setViewingReport({ id: d.id, ticker: d.ticker, taskId: d.task_id, taskType: d.task_type || 'analysis', taskStatus: d.action === 'FAILED' ? 'failed' : 'completed' })}
-                className={`p-4 border rounded-lg cursor-pointer hover:border-slate-500 transition-all ${d.action === 'FAILED' ? 'bg-red-950/30 border-red-500/30' : 'bg-slate-800 border-slate-700'
-                  }`}
-              >
-                <div className="flex items-center gap-3">
-                  <span className={`px-2 py-0.5 text-xs font-bold rounded border ${getActionStyle(d.action)}`}>{d.action}</span>
-                  <span className="text-white font-bold">{d.ticker}</span>
-                  {d.task_type && d.task_type !== 'analysis' && (
-                    <span className={`px-1.5 py-0.5 text-[10px] uppercase font-bold rounded border ${d.task_type === 'execution' ? 'bg-purple-500/20 text-purple-400 border-purple-500/30' : 'bg-slate-600 text-white border-slate-500'
-                      }`}>
-                      {d.task_type}
-                    </span>
-                  )}
-                  <span className="text-slate-500 text-xs ml-auto">{fmtTime(d.timestamp)}</span>
-                </div>
-                {d.action === 'FAILED' && (
-                  <p className="mt-2 text-xs leading-relaxed line-clamp-2 text-red-400">{d.rationale}</p>
-                )}
-                {d.stats && (
-                  <div className="mt-3 space-y-1.5 border-t border-slate-700/50 pt-2">
-                    <div className="flex gap-4 text-[10px] text-slate-500 font-mono">
-                      <span title="LLM Calls">🧠 {d.stats.llm_calls || 0}</span>
-                      <span title="Input Tokens">📥 {formatTokens(d.stats.tokens_in || 0)}</span>
-                      <span title="Output Tokens">📤 {formatTokens(d.stats.tokens_out || 0)}</span>
-                      <span title="Tool Executions">🛠 {d.stats.tool_calls || 0}</span>
-                    </div>
-                    {(d.stats.quick || d.stats.deep) && (
-                      <div className="flex gap-3 text-[9px] font-mono opacity-60">
-                        {d.stats.quick && <span className="text-blue-400">Q: {formatTokens((d.stats.quick.tokens_in || 0) + (d.stats.quick.tokens_out || 0))}</span>}
-                        {d.stats.deep && <span className="text-purple-400">D: {formatTokens((d.stats.deep.tokens_in || 0) + (d.stats.deep.tokens_out || 0))}</span>}
-                      </div>
+            {rightTab === 'decisions' ? (
+              history.length === 0 ? (
+                <div className="text-center py-10 text-slate-500 text-sm">No decisions yet. Queue a task to get started.</div>
+              ) : history.map(d => (
+                <div key={d.id}
+                  onClick={() => setViewingReport({ id: d.id, ticker: d.ticker, taskId: d.task_id, taskType: d.task_type || 'analysis', taskStatus: d.action === 'FAILED' ? 'failed' : 'completed' })}
+                  className={`p-4 border rounded-lg cursor-pointer hover:border-slate-500 transition-all ${d.action === 'FAILED' ? 'bg-red-950/30 border-red-500/30' : 'bg-slate-800 border-slate-700'
+                    }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <span className={`px-2 py-0.5 text-xs font-bold rounded border ${getActionStyle(d.action)}`}>{d.action}</span>
+                    <span className="text-white font-bold">{d.ticker}</span>
+                    {d.task_type && d.task_type !== 'analysis' && (
+                      <span className={`px-1.5 py-0.5 text-[10px] uppercase font-bold rounded border ${d.task_type === 'execution' ? 'bg-purple-500/20 text-purple-400 border-purple-500/30' : 'bg-slate-600 text-white border-slate-500'
+                        }`}>
+                        {d.task_type}
+                      </span>
                     )}
+                    <span className="text-slate-500 text-xs ml-auto">{fmtTime(d.timestamp)}</span>
                   </div>
-                )}
-              </div>
-            ))}
+                  {d.action === 'FAILED' && (
+                    <p className="mt-2 text-xs leading-relaxed line-clamp-2 text-red-400">{d.rationale}</p>
+                  )}
+                  {d.stats && (
+                    <div className="mt-3 space-y-1.5 border-t border-slate-700/50 pt-2">
+                      <div className="flex gap-4 text-[10px] text-slate-500 font-mono">
+                        <span title="LLM Calls">🧠 {d.stats.llm_calls || 0}</span>
+                        <span title="Input Tokens">📥 {formatTokens(d.stats.tokens_in || 0)}</span>
+                        <span title="Output Tokens">📤 {formatTokens(d.stats.tokens_out || 0)}</span>
+                        <span title="Tool Executions">🛠 {d.stats.tool_calls || 0}</span>
+                      </div>
+                      {(d.stats.quick || d.stats.deep) && (
+                        <div className="flex gap-3 text-[9px] font-mono opacity-60">
+                          {d.stats.quick && <span className="text-blue-400">Q: {formatTokens((d.stats.quick.tokens_in || 0) + (d.stats.quick.tokens_out || 0))}</span>}
+                          {d.stats.deep && <span className="text-purple-400">D: {formatTokens((d.stats.deep.tokens_in || 0) + (d.stats.deep.tokens_out || 0))}</span>}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))
+            ) : (
+              ledger.length === 0 ? (
+                <div className="text-center py-10 text-slate-500 text-sm">No trades in ledger. Placed trades will appear here.</div>
+              ) : [...ledger].reverse().map(entry => (
+                <div key={entry.id} className="p-4 bg-slate-800 border border-slate-700 rounded-lg space-y-2">
+                  <div className="flex items-center gap-3">
+                    <span className={`px-2 py-0.5 text-xs font-bold rounded border ${
+                      entry.action === 'BUY'
+                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                        : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+                    }`}>{entry.action}</span>
+                    <span className="text-white font-bold">{entry.ticker}</span>
+                    <span className={`text-[10px] px-2 py-0.5 rounded ${entry.status === 'confirmed' ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
+                      {entry.status}
+                    </span>
+                    <span className="text-slate-500 text-xs ml-auto">{fmtTime(entry.timestamp)}</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-700/50 text-[11px]">
+                    <div>
+                      <span className="text-slate-500 uppercase text-[9px]">Shares</span>
+                      <p className="text-slate-200 font-semibold">{Math.abs(entry.qty)}</p>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 uppercase text-[9px]">Est Price</span>
+                      <p className="text-slate-200 font-mono">${fmt(entry.estimated_price)}</p>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 uppercase text-[9px]">Exec Price</span>
+                      <p className="text-slate-200 font-mono">
+                        {entry.execution_price !== null ? `$${fmt(entry.execution_price)}` : 'Pending'}
+                      </p>
+                    </div>
+                  </div>
+                  {entry.status === 'confirmed' && (
+                    <div className="flex justify-between items-center pt-2 border-t border-slate-700/30 text-[9px] text-slate-500 font-mono">
+                      <span>Exec ID: {entry.ib_execution_id}</span>
+                      <span>Comm: ${fmt(entry.commission)}</span>
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
           </div>
         </div>
       </div>
