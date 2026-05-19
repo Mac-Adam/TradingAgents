@@ -17,6 +17,7 @@ function App() {
   const [walletName, setWalletName] = useState("My Portfolio")
   const [selectedConfig, setSelectedConfig] = useState("")
   const [selectedEnv, setSelectedEnv] = useState("")
+  const [initialCash, setInitialCash] = useState(100000)
 
   const fetchRuns = () => {
     fetch(`${API}/api/runs`)
@@ -60,6 +61,7 @@ function App() {
         wallet_name: walletName,
         config_file: selectedConfig,
         env_file: selectedEnv,
+        initial_cash: initialCash,
       })
     })
       .then(res => res.json())
@@ -141,6 +143,16 @@ function App() {
                 >
                   {envs.map(e => <option key={e} value={e}>{e}</option>)}
                 </select>
+              </div>
+
+              <div>
+                <label className="block text-sm text-slate-200 mb-1 font-medium">Initial Cash ($)</label>
+                <input
+                  type="number"
+                  value={initialCash}
+                  onChange={e => setInitialCash(parseFloat(e.target.value) || 0)}
+                  className="w-full bg-black border border-slate-600 rounded-lg p-2 text-white outline-none focus:border-accent transition-colors"
+                />
               </div>
 
               <button

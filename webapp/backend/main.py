@@ -47,22 +47,10 @@ def parse_env_file(env_filename: str) -> dict:
     return env_vars
 
 
-def get_alpaca_client(env_filename: str):
-    from alpaca.trading.client import TradingClient
-    env = parse_env_file(env_filename)
-    api_key = env.get("ALPACA_API_KEY")
-    secret_key = env.get("ALPACA_API_SECRET")
-    paper_str = env.get("ALPACA_PAPER", "true").lower()
-    paper = paper_str in ("true", "1", "yes")
-    if not api_key or not secret_key:
-        raise HTTPException(status_code=400, detail="Alpaca credentials not found in env file.")
-    return TradingClient(api_key=api_key, secret_key=secret_key, paper=paper)
-
-
 def resolve_account_type(env_filename: str) -> str:
-    env = parse_env_file(env_filename)
-    paper_str = env.get("ALPACA_PAPER", "true").lower()
-    return "PAPER" if paper_str in ("true", "1", "yes") else "REAL"
+    if "real" in env_filename.lower():
+        return "REAL"
+    return "PAPER"
 
 
 # ── Request models ─────────────────────────────────────────────────────────────
@@ -71,6 +59,7 @@ class RunRequest(BaseModel):
     wallet_name: str
     config_file: str
     env_file: str
+    initial_cash: Optional[float] = 100000.0
 
 
 class TaskRequest(BaseModel):
@@ -137,6 +126,7 @@ def create_run(run_req: RunRequest):
         "account_type": account_type,
         "status": "running",
         "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "initial_cash": run_req.initial_cash or 100000.0,
     }
     add_run(new_run)
     return new_run
@@ -148,20 +138,17 @@ def delete_run(run_id: str):
     return {"status": "ok"}
 
 
-# ── Alpaca live-data endpoints ─────────────────────────────────────────────────
+# ── Portfolio & Positions Endpoints ───────────────────────────────────────────
 
 def normalize_positions(positions: dict) -> dict:
     normalized = {}
     for ticker, val in positions.items():
+        if ticker.startswith("_"):
+            continue
         if isinstance(val, dict):
             normalized[ticker] = {
                 "qty": float(val.get("qty", 0.0)),
                 "avg_entry_price": float(val.get("avg_entry_price", 0.0))
-            }
-        else:
-            normalized[ticker] = {
-                "qty": float(val or 0.0),
-                "avg_entry_price": 0.0
             }
     return normalized
 
@@ -172,48 +159,33 @@ def get_account(run_id: str):
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
     try:
-        env = parse_env_file(run["env_file"])
-        if "IB_HOST" in env or "ALPACA_API_KEY" not in env:
-            portfolio = _db.get_ai_portfolio(run_id)
-            cash = float(portfolio["cash"])
-            
-            portfolio_value = cash
-            positions = normalize_positions(portfolio["positions"])
-            for ticker, info in positions.items():
-                qty = info["qty"]
-                if qty != 0:
-                    try:
-                        stock = yf.Ticker(ticker.replace('.', '-'))
-                        price = float(stock.fast_info['lastPrice'])
-                        portfolio_value += qty * price
-                    except Exception as e:
-                        logging.warning(f"Failed to fetch price for {ticker}: {e}")
-
-            return {
-                "equity": portfolio_value,
-                "portfolio_value": portfolio_value,
-                "cash": cash,
-                "buying_power": cash,
-                "currency": "USD",
-                "account_number": run_id,
-                "status": "ACTIVE (IBKR VIRTUAL)",
-            }
+        import yfinance as yf
+        portfolio = _db.get_ai_portfolio(run_id)
+        cash = float(portfolio["cash"])
         
-        client = get_alpaca_client(run["env_file"])
-        acct = client.get_account()
+        portfolio_value = cash
+        positions = normalize_positions(portfolio["positions"])
+        for ticker, info in positions.items():
+            qty = info["qty"]
+            if qty != 0:
+                try:
+                    stock = yf.Ticker(ticker.replace('.', '-'))
+                    price = float(stock.fast_info['lastPrice'])
+                    portfolio_value += qty * price
+                except Exception as e:
+                    logging.warning(f"Failed to fetch price for {ticker}: {e}")
+
         return {
-            "equity": float(acct.equity),
-            "portfolio_value": float(acct.portfolio_value),
-            "cash": float(acct.cash),
-            "buying_power": float(acct.buying_power),
-            "currency": acct.currency,
-            "account_number": acct.account_number,
-            "status": str(acct.status),
+            "equity": portfolio_value,
+            "portfolio_value": portfolio_value,
+            "cash": cash,
+            "buying_power": cash,
+            "currency": "USD",
+            "account_number": run_id,
+            "status": "ACTIVE (IBKR VIRTUAL)",
         }
-    except HTTPException:
-        raise
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Broker API error: {str(e)}")
+        raise HTTPException(status_code=502, detail=f"Database or pricing error: {str(e)}")
 
 
 @app.get("/api/runs/{run_id}/positions")
@@ -222,71 +194,51 @@ def get_positions(run_id: str):
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
     try:
-        env = parse_env_file(run["env_file"])
-        if "IB_HOST" in env or "ALPACA_API_KEY" not in env:
-            import yfinance as yf
-            portfolio = _db.get_ai_portfolio(run_id)
-            positions = []
-            normalized = normalize_positions(portfolio["positions"])
-            
-            for ticker, info in normalized.items():
-                qty = info["qty"]
-                avg_entry_price = info["avg_entry_price"]
-                if qty != 0:
-                    price = None
-                    try:
-                        stock = yf.Ticker(ticker.replace('.', '-'))
-                        price = float(stock.fast_info['lastPrice'])
-                    except Exception as e:
-                        logging.warning(f"Failed to fetch price for {ticker}: {e}")
-                    
-                    market_value = (qty * price) if price is not None else None
-                    
-                    unrealized_pl = None
-                    unrealized_plpc = None
-                    if price is not None:
-                        if avg_entry_price > 0:
-                            if qty > 0:
-                                unrealized_pl = qty * (price - avg_entry_price)
-                                unrealized_plpc = (price - avg_entry_price) / avg_entry_price
-                            else:
-                                unrealized_pl = qty * (price - avg_entry_price)
-                                unrealized_plpc = (avg_entry_price - price) / avg_entry_price
+        import yfinance as yf
+        portfolio = _db.get_ai_portfolio(run_id)
+        positions = []
+        normalized = normalize_positions(portfolio["positions"])
+        
+        for ticker, info in normalized.items():
+            qty = info["qty"]
+            avg_entry_price = info["avg_entry_price"]
+            if qty != 0:
+                price = None
+                try:
+                    stock = yf.Ticker(ticker.replace('.', '-'))
+                    price = float(stock.fast_info['lastPrice'])
+                except Exception as e:
+                    logging.warning(f"Failed to fetch price for {ticker}: {e}")
+                
+                market_value = (qty * price) if price is not None else None
+                
+                unrealized_pl = None
+                unrealized_plpc = None
+                if price is not None:
+                    if avg_entry_price > 0:
+                        if qty > 0:
+                            unrealized_pl = qty * (price - avg_entry_price)
+                            unrealized_plpc = (price - avg_entry_price) / avg_entry_price
                         else:
-                            unrealized_pl = 0.0
-                            unrealized_plpc = 0.0
+                            unrealized_pl = qty * (price - avg_entry_price)
+                            unrealized_plpc = (avg_entry_price - price) / avg_entry_price
+                    else:
+                        unrealized_pl = 0.0
+                        unrealized_plpc = 0.0
 
-                    positions.append({
-                        "symbol": ticker,
-                        "qty": float(qty),
-                        "avg_entry_price": avg_entry_price,
-                        "current_price": price,
-                        "market_value": market_value,
-                        "unrealized_pl": unrealized_pl,
-                        "unrealized_plpc": unrealized_plpc,
-                        "side": "long" if qty > 0 else "short",
-                    })
-            return positions
-
-        client = get_alpaca_client(run["env_file"])
-        positions = client.get_all_positions()
-        return [
-            {
-                "symbol": p.symbol,
-                "qty": float(p.qty),
-                "avg_entry_price": float(p.avg_entry_price),
-                "current_price": float(p.current_price) if p.current_price else None,
-                "market_value": float(p.market_value) if p.market_value else None,
-                "unrealized_pl": float(p.unrealized_pl) if p.unrealized_pl else None,
-                "unrealized_plpc": float(p.unrealized_plpc) if p.unrealized_plpc else None,
-                "side": str(p.side),
-            }
-            for p in positions
-        ]
-    except HTTPException:
-        raise
+                positions.append({
+                    "symbol": ticker,
+                    "qty": float(qty),
+                    "avg_entry_price": avg_entry_price,
+                    "current_price": price,
+                    "market_value": market_value,
+                    "unrealized_pl": unrealized_pl,
+                    "unrealized_plpc": unrealized_plpc,
+                    "side": "long" if qty > 0 else "short",
+                })
+        return positions
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Broker API error: {str(e)}")
+        raise HTTPException(status_code=502, detail=f"Database or pricing error: {str(e)}")
 
 
 @app.get("/api/runs/{run_id}/ledger")

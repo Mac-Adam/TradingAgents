@@ -36,11 +36,6 @@ class IBKRExecutor:
                     "qty": float(val.get("qty", 0.0)),
                     "avg_entry_price": float(val.get("avg_entry_price", 0.0))
                 }
-            else:
-                normalized[ticker] = {
-                    "qty": float(val or 0.0),
-                    "avg_entry_price": 0.0
-                }
         return normalized
 
     def _rebuild_portfolio_from_ledger(self, ai_id):

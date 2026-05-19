@@ -23,7 +23,8 @@ def init_db():
                     env_file TEXT,
                     account_type TEXT,
                     status TEXT,
-                    created_at TEXT
+                    created_at TEXT,
+                    initial_cash REAL DEFAULT 100000.0
                 )
             ''')
             conn.execute('''
@@ -113,9 +114,9 @@ def add_run(run: Dict):
     with _db_lock:
         with get_conn() as conn:
             conn.execute('''
-                INSERT INTO runs (id, wallet_name, config_file, env_file, account_type, status, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            ''', (run['id'], run['wallet_name'], run['config_file'], run['env_file'], run['account_type'], run['status'], run['created_at']))
+                INSERT INTO runs (id, wallet_name, config_file, env_file, account_type, status, created_at, initial_cash)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (run['id'], run['wallet_name'], run['config_file'], run['env_file'], run['account_type'], run['status'], run['created_at'], run.get('initial_cash', 100000.0)))
             conn.commit()
 
 def remove_run(run_id: str):
@@ -295,6 +296,10 @@ def get_task_logs(task_id: str) -> Optional[str]:
 
 # --- AI PORTFOLIOS ---
 def get_ai_portfolio(ai_id: str) -> Dict:
+    run_id = ai_id
+    if ai_id.endswith("_checkpoint"):
+        run_id = ai_id[:-11]
+        
     with _db_lock:
         with get_conn() as conn:
             row = conn.execute("SELECT * FROM ai_portfolios WHERE ai_id = ?", (ai_id,)).fetchone()
@@ -303,8 +308,15 @@ def get_ai_portfolio(ai_id: str) -> Dict:
                     "cash": row["cash"],
                     "positions": json.loads(row["positions"])
                 }
+            
+            # Fetch initial_cash from the run record
+            initial_cash = 100000.0
+            run_row = conn.execute("SELECT initial_cash FROM runs WHERE id = ?", (run_id,)).fetchone()
+            if run_row and run_row["initial_cash"] is not None:
+                initial_cash = float(run_row["initial_cash"])
+                
             return {
-                "cash": 100000.0,
+                "cash": initial_cash,
                 "positions": {}
             }
 

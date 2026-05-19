@@ -47,7 +47,7 @@ function Err({ msg }: { msg: string }) {
 export default function WalletView({ wallet, onBack, onDelete }: WalletViewProps) {
   const isReal = wallet.account_type === 'REAL';
 
-  // Alpaca
+  // Account & Positions
   const [account, setAccount] = useState<AccountData | null>(null);
   const [accountLoading, setAccountLoading] = useState(true);
   const [accountError, setAccountError] = useState<string | null>(null);
@@ -389,7 +389,11 @@ export default function WalletView({ wallet, onBack, onDelete }: WalletViewProps
                 <div className="flex items-center gap-3">
                   <span className="text-white font-bold font-mono">{task.ticker}</span>
                   {task.task_type && (
-                    <span className={`px-1.5 py-0.5 text-[10px] uppercase font-bold rounded border ${task.task_type === 'execution' ? 'bg-purple-500/20 text-purple-400 border-purple-500/30' : 'bg-blue-500/20 text-blue-400 border-blue-500/30'}`}>
+                    <span className={`px-1.5 py-0.5 text-[10px] uppercase font-bold rounded border ${
+                      task.task_type === 'execution' ? 'bg-purple-500/20 text-purple-400 border-purple-500/30' :
+                      task.task_type === 'bookkeeping' ? 'bg-amber-500/20 text-amber-400 border-amber-500/30' :
+                      'bg-blue-500/20 text-blue-400 border-blue-500/30'
+                    }`}>
                       {task.task_type}
                     </span>
                   )}
