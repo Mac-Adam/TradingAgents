@@ -8,6 +8,7 @@ from stockstats import wrap
 from typing import Annotated
 import os
 from .config import get_config
+from tradingagents.ticker import Ticker
 
 logger = logging.getLogger(__name__)
 
@@ -104,7 +105,7 @@ class StockstatsUtils:
         """Convert ticker symbols to a format compatible with yfinance (e.g., BRK.B -> BRK-B)."""
         if not ticker:
             return ticker
-        return ticker.replace(".", "-").upper()
+        return Ticker(ticker).yfinance
 
     @staticmethod
     def get_stock_stats(

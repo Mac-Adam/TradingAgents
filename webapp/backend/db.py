@@ -4,6 +4,8 @@ import os
 import threading
 from typing import Dict, List, Optional, Any
 
+from tradingagents.ticker import Ticker
+
 DB_PATH = os.path.join(os.path.dirname(__file__), "backend.db")
 _db_lock = threading.Lock()
 
@@ -141,12 +143,13 @@ def get_tasks_for_run(run_id: str) -> List[Dict]:
 def add_task(task_dict: Dict):
     stats_str = json.dumps(task_dict.get('stats')) if task_dict.get('stats') else None
     task_type = task_dict.get('task_type', 'analysis')
+    ticker = Ticker(task_dict['ticker']).canonical
     with _db_lock:
         with get_conn() as conn:
             conn.execute('''
                 INSERT INTO tasks (id, run_id, ticker, status, created_at, scheduled_at, recurrence, report_path, error, decision, stats, cancel_requested, task_type)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (task_dict['id'], task_dict['run_id'], task_dict['ticker'], task_dict['status'],
+            ''', (task_dict['id'], task_dict['run_id'], ticker, task_dict['status'],
                   task_dict['created_at'], task_dict['scheduled_at'], task_dict['recurrence'],
                   task_dict['report_path'], task_dict['error'], task_dict['decision'], stats_str,
                   int(task_dict.get('cancel_requested', False)), task_type))
@@ -245,12 +248,13 @@ def claim_next_task(now_iso: str) -> Optional[Dict]:
 def add_decision(decision: Dict):
     stats_str = json.dumps(decision.get('stats')) if decision.get('stats') else None
     task_type = decision.get('task_type', 'analysis')
+    ticker = Ticker(decision['ticker']).canonical
     with _db_lock:
         with get_conn() as conn:
             conn.execute('''
                 INSERT INTO decision_history (id, run_id, task_id, ticker, action, rationale, full_report_path, timestamp, stats, task_type)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (decision['id'], decision['run_id'], decision['task_id'], decision['ticker'],
+            ''', (decision['id'], decision['run_id'], decision['task_id'], ticker,
                   decision['action'], decision['rationale'], decision['full_report_path'],
                   decision['timestamp'], stats_str, task_type))
             conn.commit()
@@ -321,6 +325,12 @@ def get_ai_portfolio(ai_id: str) -> Dict:
             }
 
 def save_ai_portfolio(ai_id: str, cash: float, positions: Dict):
+    normalized_positions = {}
+    for k, v in positions.items():
+        if k.startswith("_"):
+            normalized_positions[k] = v
+        else:
+            normalized_positions[Ticker(k).canonical] = v
     with _db_lock:
         with get_conn() as conn:
             conn.execute('''
@@ -329,7 +339,7 @@ def save_ai_portfolio(ai_id: str, cash: float, positions: Dict):
                 ON CONFLICT(ai_id) DO UPDATE SET
                     cash = excluded.cash,
                     positions = excluded.positions
-            ''', (ai_id, cash, json.dumps(positions)))
+            ''', (ai_id, cash, json.dumps(normalized_positions)))
             conn.commit()
 
 # --- PENDING TRADES ---
@@ -338,12 +348,13 @@ def add_pending_trade(run_id: str, ticker: str, decision: str):
     from datetime import datetime, timezone
     trade_id = str(uuid.uuid4())
     now_iso = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    ticker_canonical = Ticker(ticker).canonical
     with _db_lock:
         with get_conn() as conn:
             conn.execute('''
                 INSERT INTO pending_trades (id, run_id, ticker, decision, created_at)
                 VALUES (?, ?, ?, ?, ?)
-            ''', (trade_id, run_id, ticker, decision, now_iso))
+            ''', (trade_id, run_id, ticker_canonical, decision, now_iso))
             conn.commit()
 
 def get_pending_trades(run_id: str) -> List[Dict]:
@@ -364,6 +375,7 @@ def clear_pending_trades(run_id: str, ids: List[str] = None):
 
 # --- TRADE LEDGER ---
 def add_ledger_entry(entry: Dict):
+    ticker = Ticker(entry["ticker"]).canonical
     with _db_lock:
         with get_conn() as conn:
             conn.execute('''
@@ -372,7 +384,7 @@ def add_ledger_entry(entry: Dict):
             ''', (
                 entry["id"],
                 entry["run_id"],
-                entry["ticker"],
+                ticker,
                 entry["action"],
                 float(entry["qty"]),
                 float(entry["estimated_price"]),
@@ -399,9 +411,10 @@ def get_ledger_entry_by_execution_id(exec_id: str) -> Optional[Dict]:
             return None
 
 def find_matching_estimated_trade(run_id: str, ticker: str, qty_change: float) -> Optional[Dict]:
+    ticker_canonical = Ticker(ticker).canonical
     with _db_lock:
         with get_conn() as conn:
-            rows = conn.execute("SELECT * FROM trade_ledger WHERE run_id = ? AND ticker = ? AND status = 'estimated' ORDER BY timestamp ASC", (run_id, ticker)).fetchall()
+            rows = conn.execute("SELECT * FROM trade_ledger WHERE run_id = ? AND ticker = ? AND status = 'estimated' ORDER BY timestamp ASC", (run_id, ticker_canonical)).fetchall()
             for row in rows:
                 row_qty = float(row["qty"])
                 if (row_qty > 0 and qty_change > 0) or (row_qty < 0 and qty_change < 0):

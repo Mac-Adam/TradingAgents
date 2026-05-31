@@ -6,6 +6,7 @@ export interface Run {
   account_type: string;
   status: string;
   created_at: string;
+  initial_cash?: number;
 }
 
 export interface TaskRecord {

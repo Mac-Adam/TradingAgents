@@ -23,13 +23,25 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 
 WORKDIR /app
 
-COPY . /app/
+
+# Copy requirements and lock file
+COPY project_files/TradingAgents/requirements.txt project_files/TradingAgents/uv.lock ./project_files/TradingAgents/
+
+# Copy pyproject.toml to allow uv to detect project
+COPY project_files/TradingAgents/pyproject.toml ./project_files/TradingAgents/
+
+# Install dependencies from the project directory
+WORKDIR /app/project_files/TradingAgents
+RUN /root/.local/bin/uv pip install --system --no-cache-dir -r requirements.txt
+
+WORKDIR /app
+
+# Copy remaining source code (excludes handled by .dockerignore)
+COPY project_files/TradingAgents/ ./project_files/TradingAgents/
 
 WORKDIR /app/project_files/TradingAgents
 
-RUN /root/.local/bin/uv pip install --system --no-cache-dir -r requirements.txt
-
 EXPOSE 22
 
-# 6. Start the SSH daemon
+# Start the SSH daemon
 CMD ["/usr/sbin/sshd", "-D", "-e"]

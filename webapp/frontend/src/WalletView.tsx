@@ -281,7 +281,20 @@ export default function WalletView({ wallet, onBack, onDelete }: WalletViewProps
               <div className="space-y-3">
                 <div>
                   <p className="text-slate-400 text-xs uppercase">Portfolio Value</p>
-                  <p className="text-2xl font-bold text-white">${fmt(account.portfolio_value)}</p>
+                  <div className="flex items-baseline gap-2 flex-wrap">
+                    <p className="text-2xl font-bold text-white">${fmt(account.portfolio_value)}</p>
+                    {(() => {
+                      const initialCash = wallet.initial_cash ?? 100000.0;
+                      const gain = account.portfolio_value - initialCash;
+                      const pct = (gain / initialCash) * 100;
+                      const isGain = gain >= 0;
+                      return (
+                        <span className={`text-sm font-bold ${isGain ? 'text-emerald-400' : 'text-rose-400'}`}>
+                          {isGain ? '▲ +' : '▼ '}${fmt(Math.abs(gain))} ({isGain ? '+' : ''}{pct.toFixed(2)}%)
+                        </span>
+                      );
+                    })()}
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div><p className="text-slate-400 text-xs uppercase">Equity</p><p className="text-lg font-bold text-green-400">${fmt(account.equity)}</p></div>

@@ -13,6 +13,7 @@ from task_executor import (
     start_worker, LIVE_STATES, get_runs, add_run, remove_run
 )
 import db as _db
+from tradingagents.ticker import Ticker
 
 logging.basicConfig(level=logging.INFO)
 
@@ -169,7 +170,7 @@ def get_account(run_id: str):
             qty = info["qty"]
             if qty != 0:
                 try:
-                    stock = yf.Ticker(ticker.replace('.', '-'))
+                    stock = yf.Ticker(Ticker(ticker).yfinance)
                     price = float(stock.fast_info['lastPrice'])
                     portfolio_value += qty * price
                 except Exception as e:
@@ -205,7 +206,7 @@ def get_positions(run_id: str):
             if qty != 0:
                 price = None
                 try:
-                    stock = yf.Ticker(ticker.replace('.', '-'))
+                    stock = yf.Ticker(Ticker(ticker).yfinance)
                     price = float(stock.fast_info['lastPrice'])
                 except Exception as e:
                     logging.warning(f"Failed to fetch price for {ticker}: {e}")

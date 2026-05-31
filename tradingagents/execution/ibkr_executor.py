@@ -7,6 +7,7 @@ import yfinance as yf
 from ib_insync import IB, Stock, MarketOrder
 
 from webapp.backend import db
+from tradingagents.ticker import Ticker
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +20,7 @@ class IBKRExecutor:
 
     def _get_current_price(self, ticker):
         try:
-            yf_ticker = ticker.replace('.', '-')
+            yf_ticker = Ticker(ticker).yfinance
             stock = yf.Ticker(yf_ticker)
             return float(stock.fast_info['lastPrice'])
         except Exception as e:
@@ -222,7 +223,7 @@ class IBKRExecutor:
 
                 action = 'BUY' if shares_to_trade > 0 else 'SELL'
                 
-                ib_ticker = ticker.replace('.', ' ').replace('-', ' ')
+                ib_ticker = Ticker(ticker).ibkr
                 contract = Stock(ib_ticker, 'SMART', 'USD')
                 self.ib.qualifyContracts(contract)
 
@@ -299,7 +300,7 @@ class IBKRExecutor:
             reconciled_count = 0
             for fill in ai_fills:
                 exec_id = fill.execution.execId
-                ticker = fill.contract.symbol
+                ticker = Ticker(fill.contract.symbol).canonical
                 
                 # Check if this execution is already in the ledger
                 existing = db.get_ledger_entry_by_execution_id(exec_id)

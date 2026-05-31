@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 # ── Ensure the project root is importable ──────────────────────────────────────
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 if PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, PROJECT_ROOT)
+    sys.path.append(PROJECT_ROOT)
 
 GLOBAL_CONFIGS_DIR = os.path.join(PROJECT_ROOT, "global_configs")
 GLOBAL_ENVS_DIR = os.path.join(PROJECT_ROOT, "global_envs")
