@@ -15,12 +15,35 @@ interface Props {
 export default function ReportModal({ runId, historyId, taskId, ticker, taskType, taskStatus, onClose }: Props) {
   const [report, setReport] = useState<string | null>(null);
   const [logs, setLogs] = useState<string | null>(null);
+  interface Trace {
+    id: string;
+    task_id: string;
+    run_id: string;
+    node_name: string;
+    type: 'llm' | 'tool';
+    name: string;
+    input: string;
+    output: string;
+    timestamp: string;
+  }
+  const [traces, setTraces] = useState<Trace[] | null>(null);
+  const [expandedTraces, setExpandedTraces] = useState<Record<string, boolean>>({});
+  const [expandedAgents, setExpandedAgents] = useState<Record<string, boolean>>({});
   const [liveState, setLiveState] = useState<{ agent_status: Record<string, string>, messages: [string, string, string][] } | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const formatTraceData = (val: string) => {
+    try {
+      const parsed = JSON.parse(val);
+      return JSON.stringify(parsed, null, 2);
+    } catch {
+      return val;
+    }
+  };
+
   // Only analysis tasks that completed successfully have a report tab
   const hasReport = taskType === 'analysis' && taskStatus === 'completed';
-  const [activeTab, setActiveTab] = useState<'report' | 'logs'>(hasReport ? 'report' : 'logs');
+  const [activeTab, setActiveTab] = useState<'report' | 'logs' | 'traces'>(hasReport ? 'report' : 'logs');
   const logsEndRef = useRef<HTMLDivElement>(null);
 
   // Initial fetch
@@ -43,25 +66,38 @@ export default function ReportModal({ runId, historyId, taskId, ticker, taskType
           .then(d => setLogs(d.logs))
           .catch(() => setLogs(null))
       );
+      promises.push(
+        fetch(`${API}/api/tasks/${taskId}/traces`)
+          .then(r => r.ok ? r.json() : Promise.reject())
+          .then(d => setTraces(d.traces))
+          .catch(() => setTraces(null))
+      );
     }
 
     Promise.allSettled(promises).then(() => setLoading(false));
   }, [runId, historyId, taskId, hasReport]);
 
-  // Polling for live logs (only when task is running)
+  // Polling for live logs/traces (only when task is running)
   useEffect(() => {
-    if (taskStatus === 'running' && activeTab === 'logs' && taskId) {
+    if (taskStatus === 'running' && taskId) {
       const interval = setInterval(() => {
-        if (taskType === 'analysis') {
-          fetch(`${API}/api/tasks/${taskId}/live`)
+        if (activeTab === 'logs') {
+          if (taskType === 'analysis') {
+            fetch(`${API}/api/tasks/${taskId}/live`)
+              .then(r => r.ok ? r.json() : Promise.reject())
+              .then(d => setLiveState(d))
+              .catch(console.error);
+          }
+          fetch(`${API}/api/tasks/${taskId}/logs`)
             .then(r => r.ok ? r.json() : Promise.reject())
-            .then(d => setLiveState(d))
+            .then(d => setLogs(d.logs))
+            .catch(console.error);
+        } else if (activeTab === 'traces') {
+          fetch(`${API}/api/tasks/${taskId}/traces`)
+            .then(r => r.ok ? r.json() : Promise.reject())
+            .then(d => setTraces(d.traces))
             .catch(console.error);
         }
-        fetch(`${API}/api/tasks/${taskId}/logs`)
-          .then(r => r.ok ? r.json() : Promise.reject())
-          .then(d => setLogs(d.logs))
-          .catch(console.error);
       }, 2000);
       return () => clearInterval(interval);
     }
@@ -103,9 +139,8 @@ export default function ReportModal({ runId, historyId, taskId, ticker, taskType
             <h2 className="text-xl font-bold text-white">
               {headerTitle}: {ticker}
             </h2>
-            <span className={`px-1.5 py-0.5 text-[10px] uppercase font-bold rounded border ${
-              taskType === 'execution' ? 'bg-purple-500/20 text-purple-400 border-purple-500/30' : 'bg-blue-500/20 text-blue-400 border-blue-500/30'
-            }`}>
+            <span className={`px-1.5 py-0.5 text-[10px] uppercase font-bold rounded border ${taskType === 'execution' ? 'bg-purple-500/20 text-purple-400 border-purple-500/30' : 'bg-blue-500/20 text-blue-400 border-blue-500/30'
+              }`}>
               {taskType}
             </span>
             {taskStatus === 'failed' && (
@@ -135,8 +170,8 @@ export default function ReportModal({ runId, historyId, taskId, ticker, taskType
             <button
               onClick={() => setActiveTab('report')}
               className={`px-6 py-3 text-sm font-medium transition-colors ${activeTab === 'report'
-                  ? 'text-accent border-b-2 border-accent bg-accent/5'
-                  : 'text-slate-400 hover:text-white'
+                ? 'text-accent border-b-2 border-accent bg-accent/5'
+                : 'text-slate-400 hover:text-white'
                 }`}
             >
               📄 Report
@@ -145,13 +180,25 @@ export default function ReportModal({ runId, historyId, taskId, ticker, taskType
           <button
             onClick={() => setActiveTab('logs')}
             className={`px-6 py-3 text-sm font-medium transition-colors flex items-center gap-2 ${activeTab === 'logs'
-                ? 'text-accent border-b-2 border-accent bg-accent/5'
-                : 'text-slate-400 hover:text-white'
+              ? 'text-accent border-b-2 border-accent bg-accent/5'
+              : 'text-slate-400 hover:text-white'
               }`}
           >
             🔍 {taskStatus === 'running' ? 'Live Logs' : 'Logs'}
             {taskStatus === 'running' && activeTab === 'logs' && <span className="w-2 h-2 rounded-full bg-accent animate-ping" />}
           </button>
+          {taskId && (
+            <button
+              onClick={() => setActiveTab('traces')}
+              className={`px-6 py-3 text-sm font-medium transition-colors flex items-center gap-2 ${activeTab === 'traces'
+                ? 'text-accent border-b-2 border-accent bg-accent/5'
+                : 'text-slate-400 hover:text-white'
+                }`}
+            >
+              ⚙️ Details
+              {taskStatus === 'running' && activeTab === 'traces' && <span className="w-2 h-2 rounded-full bg-accent animate-ping" />}
+            </button>
+          )}
         </div>
 
         {/* Content */}
@@ -166,6 +213,99 @@ export default function ReportModal({ runId, historyId, taskId, ticker, taskType
             ) : (
               <p className="text-slate-400 text-center py-12">Report not available.</p>
             )
+          ) : activeTab === 'traces' ? (
+            <div className="flex flex-col gap-4 flex-grow">
+              {(!traces || traces.length === 0) ? (
+                <p className="text-slate-500 text-center py-12">No trace records found for this task.</p>
+              ) : (
+                <div className="space-y-4">
+                  {Object.entries(
+                    traces.reduce<Record<string, Trace[]>>((acc, trace) => {
+                      const group = trace.node_name || 'System';
+                      if (!acc[group]) acc[group] = [];
+                      acc[group].push(trace);
+                      return acc;
+                    }, {})
+                  ).map(([agentName, agentTraces]) => {
+                    const isAgentExpanded = expandedAgents[agentName] !== false;
+                    return (
+                      <div key={agentName} className="bg-slate-900 border border-slate-850 rounded-xl overflow-hidden">
+                        {/* Agent Header */}
+                        <button
+                          onClick={() => setExpandedAgents(prev => ({ ...prev, [agentName]: !isAgentExpanded }))}
+                          className="w-full flex items-center justify-between p-4 bg-slate-900/60 hover:bg-slate-800/60 transition-colors text-left border-b border-slate-800"
+                        >
+                          <div className="flex items-center gap-3">
+                            <span className="text-sm font-bold text-white uppercase tracking-wider">{agentName}</span>
+                            <span className="px-2 py-0.5 bg-slate-850 text-slate-400 text-[10px] font-mono rounded-full border border-slate-700">
+                              {agentTraces.length} {agentTraces.length === 1 ? 'call' : 'calls'}
+                            </span>
+                          </div>
+                          <span className="text-slate-400 text-xs font-bold transition-transform duration-200">
+                            {isAgentExpanded ? 'COLLAPSE ▲' : 'EXPAND ▼'}
+                          </span>
+                        </button>
+
+                        {/* Agent Traces Content */}
+                        {isAgentExpanded && (
+                          <div className="p-4 space-y-3 bg-slate-950/40 border-t border-slate-900">
+                            {agentTraces.map((trace) => {
+                              const isTraceExpanded = !!expandedTraces[trace.id];
+                              return (
+                                <div key={trace.id} className="border border-slate-800 rounded-lg overflow-hidden bg-slate-950/60">
+                                  {/* Trace Header */}
+                                  <button
+                                    onClick={() => setExpandedTraces(prev => ({ ...prev, [trace.id]: !isTraceExpanded }))}
+                                    className="w-full flex items-center justify-between p-3 hover:bg-slate-800/40 transition-colors text-left"
+                                  >
+                                    <div className="flex items-center gap-3 flex-wrap min-w-0">
+                                      <span className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider ${
+                                        trace.type === 'llm' 
+                                          ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30' 
+                                          : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                                      }`}>
+                                        {trace.type}
+                                      </span>
+                                      <span className="text-xs font-semibold font-mono text-slate-200 truncate">
+                                        {trace.name}
+                                      </span>
+                                      <span className="text-[10px] text-slate-500 font-mono">
+                                        {new Date(trace.timestamp).toLocaleTimeString()}
+                                      </span>
+                                    </div>
+                                    <span className="text-[10px] uppercase font-bold text-slate-400 hover:text-white">
+                                      {isTraceExpanded ? 'Hide Payload' : 'Show Payload'}
+                                    </span>
+                                  </button>
+
+                                  {/* Trace Details (Input / Output) */}
+                                  {isTraceExpanded && (
+                                    <div className="p-3 border-t border-slate-800 bg-slate-950/80 space-y-3">
+                                      <div>
+                                        <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 font-mono">Input</div>
+                                        <pre className="text-[11px] font-mono text-slate-300 whitespace-pre-wrap bg-slate-900/60 p-3 rounded border border-slate-850 max-h-80 overflow-y-auto leading-relaxed">
+                                          {formatTraceData(trace.input)}
+                                        </pre>
+                                      </div>
+                                      <div>
+                                        <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 font-mono">Output</div>
+                                        <pre className="text-[11px] font-mono text-slate-300 whitespace-pre-wrap bg-slate-900/60 p-3 rounded border border-slate-850 max-h-80 overflow-y-auto leading-relaxed">
+                                          {formatTraceData(trace.output)}
+                                        </pre>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           ) : (
             <div className="flex flex-col gap-6 flex-grow">
               {/* Agent Status grid — only for analysis tasks that are running */}
@@ -187,8 +327,8 @@ export default function ReportModal({ runId, historyId, taskId, ticker, taskType
                             <div key={agent} className="flex items-center justify-between gap-2">
                               <span className="text-slate-300 truncate" title={agent}>{agent}</span>
                               <span className={`px-1.5 py-0.5 rounded text-[10px] uppercase shrink-0 ${status === 'completed' ? 'bg-green-500/20 text-green-400 border border-green-500/30' :
-                                  status === 'in_progress' ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 animate-pulse' :
-                                    'bg-slate-800 text-slate-500 border border-slate-700'
+                                status === 'in_progress' ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 animate-pulse' :
+                                  'bg-slate-800 text-slate-500 border border-slate-700'
                                 }`}>
                                 {status}
                               </span>
@@ -212,8 +352,8 @@ export default function ReportModal({ runId, historyId, taskId, ticker, taskType
                         <div key={i} className="flex gap-3">
                           <span className="text-slate-500 shrink-0">[{msg[0]}]</span>
                           <span className={`shrink-0 font-bold ${msg[1] === 'System' ? 'text-blue-400' :
-                              msg[1] === 'Agent' ? 'text-green-400' :
-                                msg[1] === 'Tool Call' ? 'text-yellow-400' : 'text-slate-400'
+                            msg[1] === 'Agent' ? 'text-green-400' :
+                              msg[1] === 'Tool Call' ? 'text-yellow-400' : 'text-slate-400'
                             }`}>[{msg[1]}]</span>
                           <span className="text-slate-300 break-words">{msg[2]}</span>
                         </div>

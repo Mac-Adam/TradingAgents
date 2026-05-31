@@ -3,6 +3,10 @@ import json
 import pandas as pd
 from datetime import date, timedelta, datetime
 from typing import Annotated
+import contextvars
+
+ACTIVE_TRADE_DATE = contextvars.ContextVar("active_trade_date", default=None)
+CURRENT_NODE_NAME = contextvars.ContextVar("current_node_name", default=None)
 
 SavePathType = Annotated[str, "File path to save data. If None, data is not saved."]
 

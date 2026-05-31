@@ -8,12 +8,14 @@ from .stockstats_utils import StockstatsUtils, _clean_dataframe, yf_retry, load_
 
 def get_YFin_data_online(
     symbol: Annotated[str, "ticker symbol of the company"],
-    start_date: Annotated[str, "Start date in yyyy-mm-dd format"],
-    end_date: Annotated[str, "End date in yyyy-mm-dd format"],
+    curr_date: Annotated[str, "Current date in yyyy-mm-dd format"],
+    lookback_days: Annotated[int, "number of days of stock data to look back"] = 90,
 ):
 
-    datetime.strptime(start_date, "%Y-%m-%d")
-    datetime.strptime(end_date, "%Y-%m-%d")
+    curr_dt = datetime.strptime(curr_date, "%Y-%m-%d")
+    start_dt = curr_dt - relativedelta(days=lookback_days)
+    start_date = start_dt.strftime("%Y-%m-%d")
+    end_date = curr_date
 
     # Create ticker object
     sanitized_symbol = StockstatsUtils.sanitize_yf_ticker(symbol)

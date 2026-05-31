@@ -356,6 +356,12 @@ def _execute_task(task: TaskRecord):
             _save_logs()
         return
 
+    # Cleanup old traces (past week retention)
+    try:
+        db.cleanup_old_traces(days=7)
+    except Exception as e:
+        logger.warning("Failed to cleanup old task traces: %s", e)
+
     trade_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     # Use all analysts (maxed-out run)
@@ -363,6 +369,9 @@ def _execute_task(task: TaskRecord):
 
     from cli.stats_handler import StatsCallbackHandler
     stats_handler = StatsCallbackHandler()
+
+    from tracing_handler import TracingCallbackHandler
+    tracing_handler = TracingCallbackHandler(task.id, run["id"])
 
     try:
         from tradingagents.graph.trading_graph import TradingAgentsGraph
@@ -386,7 +395,7 @@ def _execute_task(task: TaskRecord):
             selected_analysts=selected_analysts,
             config=config,
             debug=True,
-            callbacks=[stats_handler, cancel_handler],
+            callbacks=[stats_handler, cancel_handler, tracing_handler],
         )
         
         # We must set these properties on the graph since we are bypassing propagate()
@@ -407,7 +416,7 @@ def _execute_task(task: TaskRecord):
         init_agent_state = graph.propagator.create_initial_state(
             task.ticker, trade_date, past_context=past_context
         )
-        args = graph.propagator.get_graph_args(callbacks=[stats_handler, cancel_handler])
+        args = graph.propagator.get_graph_args(callbacks=[stats_handler, cancel_handler, tracing_handler])
 
         trace = []
         for chunk in graph.graph.stream(init_agent_state, **args):

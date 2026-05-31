@@ -1,7 +1,7 @@
 {
   "llm_provider": "ollama",
-  "deep_think_llm": "qwen3.5:32k_ctx",
-  "quick_think_llm": "qwen3.5:32k_ctx",
+  "deep_think_llm": "gemma4:32k_ctx",
+  "quick_think_llm": "gemma4:32k_ctx",
   "backend_url": "http://127.0.0.1:11434",
   "google_thinking_level": null,
   "openai_reasoning_effort": null,

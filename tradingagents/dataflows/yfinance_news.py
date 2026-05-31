@@ -49,16 +49,16 @@ def _extract_article_data(article: dict) -> dict:
 
 def get_news_yfinance(
     ticker: str,
-    start_date: str,
-    end_date: str,
+    curr_date: str,
+    lookback_days: int = 7,
 ) -> str:
     """
     Retrieve news for a specific stock ticker using yfinance.
 
     Args:
         ticker: Stock ticker symbol (e.g., "AAPL")
-        start_date: Start date in yyyy-mm-dd format
-        end_date: End date in yyyy-mm-dd format
+        curr_date: Current date in yyyy-mm-dd format
+        lookback_days: Number of days of news to look back (default 7)
 
     Returns:
         Formatted string containing news articles
@@ -71,9 +71,12 @@ def get_news_yfinance(
         if not news:
             return f"No news found for {ticker}"
 
-        # Parse date range for filtering
-        start_dt = datetime.strptime(start_date, "%Y-%m-%d")
-        end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+        # Calculate date range
+        curr_dt = datetime.strptime(curr_date, "%Y-%m-%d")
+        start_dt = curr_dt - relativedelta(days=lookback_days)
+        end_dt = curr_dt
+        start_date = start_dt.strftime("%Y-%m-%d")
+        end_date = end_dt.strftime("%Y-%m-%d")
 
         news_str = ""
         filtered_count = 0

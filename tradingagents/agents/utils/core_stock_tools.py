@@ -6,17 +6,20 @@ from tradingagents.dataflows.interface import route_to_vendor
 @tool
 def get_stock_data(
     symbol: Annotated[str, "ticker symbol of the company"],
-    start_date: Annotated[str, "Start date in yyyy-mm-dd format"],
-    end_date: Annotated[str, "End date in yyyy-mm-dd format"],
+    lookback_days: Annotated[int, "number of days of stock data to look back (default 90)"] = 90,
 ) -> str:
     """
-    Retrieve stock price data (OHLCV) for a given ticker symbol.
+    Retrieve stock price data (OHLCV) for a given ticker symbol over a relative time window.
     Uses the configured core_stock_apis vendor.
     Args:
         symbol (str): Ticker symbol of the company, e.g. AAPL, TSM
-        start_date (str): Start date in yyyy-mm-dd format
-        end_date (str): End date in yyyy-mm-dd format
+        lookback_days (int): Number of days of stock data to look back (default 90)
     Returns:
-        str: A formatted dataframe containing the stock price data for the specified ticker symbol in the specified date range.
+        str: A formatted dataframe containing the stock price data for the specified ticker symbol.
     """
-    return route_to_vendor("get_stock_data", symbol, start_date, end_date)
+    from tradingagents.dataflows.utils import ACTIVE_TRADE_DATE
+    from datetime import datetime
+    curr_date = ACTIVE_TRADE_DATE.get()
+    if not curr_date:
+        curr_date = datetime.now().strftime("%Y-%m-%d")
+    return route_to_vendor("get_stock_data", symbol, curr_date, lookback_days)

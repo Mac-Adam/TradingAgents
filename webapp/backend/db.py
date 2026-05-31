@@ -95,6 +95,19 @@ def init_db():
                     timestamp TEXT
                 )
             ''')
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS task_traces (
+                    id TEXT PRIMARY KEY,
+                    task_id TEXT,
+                    run_id TEXT,
+                    node_name TEXT,
+                    type TEXT,
+                    name TEXT,
+                    input TEXT,
+                    output TEXT,
+                    timestamp TEXT
+                )
+            ''')
             try:
                 conn.execute("ALTER TABLE tasks ADD COLUMN task_type TEXT DEFAULT 'analysis'")
             except sqlite3.OperationalError:
@@ -429,4 +442,29 @@ def update_ledger_entry(entry_id: str, status: str, execution_price: float, comm
                 SET status = ?, execution_price = ?, commission = ?, ib_execution_id = ?, timestamp = ?
                 WHERE id = ?
             ''', (status, execution_price, commission, ib_execution_id, timestamp, entry_id))
+            conn.commit()
+
+
+# --- TASK TRACES ---
+def add_task_trace(trace: Dict):
+    with _db_lock:
+        with get_conn() as conn:
+            conn.execute('''
+                INSERT INTO task_traces (id, task_id, run_id, node_name, type, name, input, output, timestamp)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (trace['id'], trace['task_id'], trace['run_id'], trace['node_name'], trace['type'], trace['name'], trace['input'], trace['output'], trace['timestamp']))
+            conn.commit()
+
+def get_task_traces(task_id: str) -> List[Dict]:
+    with _db_lock:
+        with get_conn() as conn:
+            rows = conn.execute("SELECT * FROM task_traces WHERE task_id = ? ORDER BY timestamp ASC", (task_id,)).fetchall()
+            return [dict(row) for row in rows]
+
+def cleanup_old_traces(days: int = 7):
+    from datetime import datetime, timedelta, timezone
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat().replace("+00:00", "Z")
+    with _db_lock:
+        with get_conn() as conn:
+            conn.execute("DELETE FROM task_traces WHERE timestamp < ?", (cutoff,))
             conn.commit()

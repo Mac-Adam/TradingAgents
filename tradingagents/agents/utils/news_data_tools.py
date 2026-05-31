@@ -4,21 +4,24 @@ from tradingagents.dataflows.interface import route_to_vendor
 
 @tool
 def get_news(
-    ticker: Annotated[str, "Ticker symbol"],
-    start_date: Annotated[str, "Start date in yyyy-mm-dd format"],
-    end_date: Annotated[str, "End date in yyyy-mm-dd format"],
+    ticker: Annotated[str, "ticker symbol of the company"],
+    lookback_days: Annotated[int, "number of days of news data to look back (default 7)"] = 7,
 ) -> str:
     """
-    Retrieve news data for a given ticker symbol.
+    Retrieve news data for a given ticker symbol over a relative time window.
     Uses the configured news_data vendor.
     Args:
-        ticker (str): Ticker symbol
-        start_date (str): Start date in yyyy-mm-dd format
-        end_date (str): End date in yyyy-mm-dd format
+        ticker (str): Ticker symbol of the company
+        lookback_days (int): Number of days of news data to look back (default 7)
     Returns:
         str: A formatted string containing news data
     """
-    return route_to_vendor("get_news", ticker, start_date, end_date)
+    from tradingagents.dataflows.utils import ACTIVE_TRADE_DATE
+    from datetime import datetime
+    curr_date = ACTIVE_TRADE_DATE.get()
+    if not curr_date:
+        curr_date = datetime.now().strftime("%Y-%m-%d")
+    return route_to_vendor("get_news", ticker, curr_date, lookback_days)
 
 @tool
 def get_global_news(

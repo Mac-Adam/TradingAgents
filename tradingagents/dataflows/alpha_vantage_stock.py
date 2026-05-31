@@ -3,8 +3,8 @@ from .alpha_vantage_common import _make_api_request, _filter_csv_by_date_range
 
 def get_stock(
     symbol: str,
-    start_date: str,
-    end_date: str
+    curr_date: str,
+    lookback_days: int = 90,
 ) -> str:
     """
     Returns raw daily OHLCV values, adjusted close values, and historical split/dividend events
@@ -12,14 +12,18 @@ def get_stock(
 
     Args:
         symbol: The name of the equity. For example: symbol=IBM
-        start_date: Start date in yyyy-mm-dd format
-        end_date: End date in yyyy-mm-dd format
+        curr_date: Current date in yyyy-mm-dd format
+        lookback_days: Number of days of stock data to look back (default 90)
 
     Returns:
         CSV string containing the daily adjusted time series data filtered to the date range.
     """
     # Parse dates to determine the range
-    start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+    curr_dt = datetime.strptime(curr_date, "%Y-%m-%d")
+    from dateutil.relativedelta import relativedelta
+    start_dt = curr_dt - relativedelta(days=lookback_days)
+    start_date = start_dt.strftime("%Y-%m-%d")
+    end_date = curr_date
     today = datetime.now()
 
     # Choose outputsize based on whether the requested range is within the latest 100 days

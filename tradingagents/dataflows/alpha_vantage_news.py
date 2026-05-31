@@ -1,18 +1,23 @@
 from .alpha_vantage_common import _make_api_request, format_datetime_for_api
 
-def get_news(ticker, start_date, end_date) -> dict[str, str] | str:
+def get_news(ticker, curr_date, lookback_days: int = 7) -> dict[str, str] | str:
     """Returns live and historical market news & sentiment data from premier news outlets worldwide.
 
     Covers stocks, cryptocurrencies, forex, and topics like fiscal policy, mergers & acquisitions, IPOs.
 
     Args:
         ticker: Stock symbol for news articles.
-        start_date: Start date for news search.
-        end_date: End date for news search.
+        curr_date: Current date in yyyy-mm-dd format.
+        lookback_days: Number of days to look back (default 7).
 
     Returns:
         Dictionary containing news sentiment data or JSON string.
     """
+    from datetime import datetime, timedelta
+    curr_dt = datetime.strptime(curr_date, "%Y-%m-%d")
+    start_dt = curr_dt - timedelta(days=lookback_days)
+    start_date = start_dt.strftime("%Y-%m-%d")
+    end_date = curr_date
 
     params = {
         "tickers": ticker,

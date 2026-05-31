@@ -333,3 +333,11 @@ def task_live_state(task_id: str):
         "agent_status": getattr(state, "agent_status", {}),
         "messages": list(getattr(state, "messages", []))
     }
+
+@app.get("/api/tasks/{task_id}/traces")
+def task_traces(task_id: str):
+    try:
+        traces = _db.get_task_traces(task_id)
+        return {"traces": traces}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to load traces: {str(e)}")

@@ -10,6 +10,19 @@ from tradingagents.agents.utils.agent_states import AgentState
 from .conditional_logic import ConditionalLogic
 
 
+def wrap_node_with_context(node_name, node_func):
+    from tradingagents.dataflows.utils import CURRENT_NODE_NAME
+    def wrapper(state, *args, **kwargs):
+        token = CURRENT_NODE_NAME.set(node_name)
+        try:
+            if hasattr(node_func, "invoke"):
+                return node_func.invoke(state, *args, **kwargs)
+            return node_func(state, *args, **kwargs)
+        finally:
+            CURRENT_NODE_NAME.reset(token)
+    return wrapper
+
+
 class GraphSetup:
     """Handles the setup and configuration of the agent graph."""
 
@@ -91,21 +104,28 @@ class GraphSetup:
 
         # Add analyst nodes to the graph
         for analyst_type, node in analyst_nodes.items():
-            workflow.add_node(f"{analyst_type.capitalize()} Analyst", node)
             workflow.add_node(
-                f"Msg Clear {analyst_type.capitalize()}", delete_nodes[analyst_type]
+                f"{analyst_type.capitalize()} Analyst", 
+                wrap_node_with_context(f"{analyst_type.capitalize()} Analyst", node)
             )
-            workflow.add_node(f"tools_{analyst_type}", tool_nodes[analyst_type])
+            workflow.add_node(
+                f"Msg Clear {analyst_type.capitalize()}", 
+                wrap_node_with_context(f"Msg Clear {analyst_type.capitalize()}", delete_nodes[analyst_type])
+            )
+            workflow.add_node(
+                f"tools_{analyst_type}", 
+                wrap_node_with_context(f"tools_{analyst_type}", tool_nodes[analyst_type])
+            )
 
         # Add other nodes
-        workflow.add_node("Bull Researcher", bull_researcher_node)
-        workflow.add_node("Bear Researcher", bear_researcher_node)
-        workflow.add_node("Research Manager", research_manager_node)
-        workflow.add_node("Trader", trader_node)
-        workflow.add_node("Aggressive Analyst", aggressive_analyst)
-        workflow.add_node("Neutral Analyst", neutral_analyst)
-        workflow.add_node("Conservative Analyst", conservative_analyst)
-        workflow.add_node("Portfolio Manager", portfolio_manager_node)
+        workflow.add_node("Bull Researcher", wrap_node_with_context("Bull Researcher", bull_researcher_node))
+        workflow.add_node("Bear Researcher", wrap_node_with_context("Bear Researcher", bear_researcher_node))
+        workflow.add_node("Research Manager", wrap_node_with_context("Research Manager", research_manager_node))
+        workflow.add_node("Trader", wrap_node_with_context("Trader", trader_node))
+        workflow.add_node("Aggressive Analyst", wrap_node_with_context("Aggressive Analyst", aggressive_analyst))
+        workflow.add_node("Neutral Analyst", wrap_node_with_context("Neutral Analyst", neutral_analyst))
+        workflow.add_node("Conservative Analyst", wrap_node_with_context("Conservative Analyst", conservative_analyst))
+        workflow.add_node("Portfolio Manager", wrap_node_with_context("Portfolio Manager", portfolio_manager_node))
 
         # Define edges
         # Start with the first analyst
