@@ -232,7 +232,7 @@ class IBKRExecutor:
 
                 trade = self.ib.placeOrder(contract, order)
                 
-                max_wait = 2.0
+                max_wait = float(os.getenv("IB_ORDER_TIMEOUT", "10.0"))
                 waited = 0.0
                 
                 while trade.orderStatus.status in ('ApiPending', 'PendingSubmit') and waited < max_wait:

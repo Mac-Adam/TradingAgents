@@ -13,9 +13,11 @@ This directory is the heart of the TradingAgents framework. It defines the multi
     *   `schemas.py`: Pydantic models standardizing the output structures from the agents.
 *   **`dataflows/`**: Modules handling data retrieval and normalization.
     *   Handles data from AlphaVantage (fundamentals, indicators, news, stock data) and Yahoo Finance (yfinance).
+    *   **Implicit Date Context**: Integrates `ACTIVE_TRADE_DATE` context variable (in [utils.py](file:///app/TradingAgents/tradingagents/dataflows/utils.py)) to track the active trade date programmatically, allowing data retrieval tools to accept relative lookback windows (in days) rather than requiring the LLM to calculate or provide absolute start/end dates.
     *   `interface.py` & `stockstats_utils.py`: Abstractions and utilities for financial math and data presentation.
 *   **`graph/`**: The LangGraph implementation mapping the workflow of the agents.
     *   `trading_graph.py`: The `TradingAgentsGraph` class that initializes and runs the `propagate()` flow. *Note: Trade execution is decoupled. The graph pushes actionable decisions to a `pending_trades` table, which is then processed by a standalone `execution` task.*
+    *   `setup.py`: Constructs and compiles the LangGraph StateGraph workflow. Wraps all nodes with `wrap_node_with_context` to dynamically bind `CURRENT_NODE_NAME` context variable during graph execution. Handles calling `.invoke` on non-callable Runnable nodes (e.g. `ToolNode`).
     *   `checkpointer.py`: Logic for saving and resuming the state (SQLite checkpointer).
     *   `conditional_logic.py` / `propagation.py` / `reflection.py`: Logic controlling how the state moves between the agents.
 *   **`execution/`**: Modules handling interactions with actual brokers.

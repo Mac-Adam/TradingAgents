@@ -10,6 +10,8 @@ This directory contains the automated tests (pytest) ensuring the correctness an
 *   **`test_signal_processing.py`**: Validates the logic in the technical/fundamental signal handlers, ensuring the math and logic behind trading signals are correct.
 *   **`test_structured_agents.py`**: Tests that agents properly initialize and their outputs conform to the strict Pydantic schemas.
 *   **`test_ticker_symbol_handling.py`**: Verifies handling of edge cases in stock ticker symbols.
+*   **`test_relative_tools.py`**: Verifies calculations of lookback windows and context-based trade date resolution for stock/news dataflows.
+*   **`test_execution_tracing.py`**: Verifies langchain model/tool execution tracing context logic, callback triggers, database logging, 7-day retention cleanup, and Runnable node context wrapping.
 *   **`conftest.py`**: Defines standard pytest fixtures, mocked responses, or test configurations used across the test suite.
 
 ## Running Tests

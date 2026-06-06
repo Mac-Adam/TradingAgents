@@ -26,4 +26,12 @@ When interacting with the backend SQLite database (`/app/TradingAgents/webapp/ba
 - **DO NOT** assume the `sqlite3` CLI tool is available (it may return `command not found`).
 - **ALWAYS** use Python scripts or one-liners via `python3 -c "import sqlite3; ..."` to query or modify the database reliably on your first attempt.
 - **NEVER** use regex or simple file parsing (like `cat`) to extract data from `.db` or `.json` persistence files.
+- **Task Traces**: The SQLite database contains a `task_traces` table storing execution logs of every LLM and tool invocation. Old traces are automatically cleaned up if they are older than 7 days (`db.cleanup_old_traces`).
 - If you change the database schema or location, you **MUST** update this skill and the `webapp/agent.md` file immediately to reflect the new structure.
+
+## Multi-Agent Graph Node Wrapping Rules
+
+When extending or adding new nodes to the LangGraph execution flow:
+- **ALWAYS** wrap your node function using `wrap_node_with_context(node_name, node_func)` inside [setup.py](file:///app/TradingAgents/tradingagents/graph/setup.py) to bind the node's name to the active `CURRENT_NODE_NAME` context variable.
+- This ensures that execution callback tracing correctly maps LLM and tool calls back to their parent agent/analyst in the UI.
+- If the node is a LangGraph Runnable (like `ToolNode`), the wrapper calls `.invoke` instead of trying to call it as a python function, preventing `TypeError` errors.

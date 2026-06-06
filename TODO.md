@@ -17,14 +17,16 @@
 ## 3. Enhance the framework
 - [ ] **a)** **Ticker Selector**: The swarm currently requires the exact ticker to propagate. Add a "ticker selector" Agent (or swarm of agents) that analyzes the broad market and chooses interesting stocks possibly worth looking into. This would then be propagated by the already existing swarm of agents along with the stocks currently in the portfolio.
 - [ ] **b)** **Report Maker**: At the end of each run, add an additional agent (Report Maker) that analyzes the responses and prepares a summary for future agents to use (for example, so that they know why they bought something some time ago).
-- [/] **c)** **Wallet View Backend Integration**: 
+- [x] **c)** **Wallet View Backend Integration**: 
   - [x] Connect Wallet View to real balance/equity APIs.
   - [x] Connect Wallet View to real active trades APIs.
   - [x] Implement task scheduling and automation bots for the Agent Queue. → `task_executor.py` with sequential worker thread.
-  - [ ] Implement full CLI-like interactive output in the task details panel.
+  - [x] Implement full execution trace details (LLM/tool payloads) grouped by agent in the task details panel.
 
 ## Architectural Notes
 - **Task Executor**: `webapp/backend/task_executor.py` runs a single daemon worker thread that processes tasks sequentially across all wallets. Env vars are loaded per-task via `dotenv(override=True)`. This means tasks from different wallets are safe but run one-at-a-time.
 - **Task Types**: `task_executor` supports multiple `task_type`s (e.g., `analysis`, `execution`). Both types of tasks can be scheduled immediately (ASAP) or for future execution (Scheduled / Daily Recurrence). The `analysis` task runs the LLM graph and pushes actionable decisions into the `pending_trades` SQLite table. The `execution` task pulls from `pending_trades` to execute batches on IBKR, ensuring scalability and decoupling of analysis and execution. When tasks are recurring, their specific `task_type` is correctly preserved across iterations.
 - **Reports**: Saved to `webapp/backend/reports/{run_id}/{TICKER_TIMESTAMP}/` using `cli.main.save_report_to_disk`.
 - **IBKR Executor**: Uses `webapp/backend/db.py` to maintain virtual sub-accounts (`ai_portfolios`) since paper IBKR accounts are limited to one per user. Trade orders are tagged via `orderRef` to track which AI placed them.
+- **Execution Tracing**: All LLM and tool invocations are traced during graph execution using `TracingCallbackHandler` (defined in [tracing_handler.py](file:///app/TradingAgents/webapp/backend/tracing_handler.py)). Traces are saved in the SQLite `task_traces` table. A 7-day retention cleanup policy runs automatically via `db.cleanup_old_traces` on new task executions.
+- **Node Context Wrapping**: Node executions are wrapped by `wrap_node_with_context` in [setup.py](file:///app/TradingAgents/tradingagents/graph/setup.py) to bind the active node name to `CURRENT_NODE_NAME` contextvar. If the node is a LangGraph Runnable (like `ToolNode`), the wrapper calls `.invoke` instead of calling the object directly as a function.
