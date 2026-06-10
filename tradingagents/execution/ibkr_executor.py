@@ -233,16 +233,16 @@ class IBKRExecutor:
                 trade = self.ib.placeOrder(contract, order)
                 
                 max_wait = float(os.getenv("IB_ORDER_TIMEOUT", "10.0"))
-                waited = 0.0
+                import time
+                start_time = time.time()
                 
-                while trade.orderStatus.status in ('ApiPending', 'PendingSubmit') and waited < max_wait:
+                while trade.orderStatus.status in ('ApiPending', 'PendingSubmit') and (time.time() - start_time) < max_wait:
                     self.ib.sleep(0.1) 
-                    waited += 0.1
 
                 current_status = trade.orderStatus.status
 
                 # Now evaluate the resolved status
-                if current_status in ('Submitted', 'PreSubmitted', 'Filled'):
+                if current_status in ('Submitted', 'PreSubmitted', 'Filled', 'PendingSubmit'):
                     actual_shares_signed = abs_shares if action == 'BUY' else -abs_shares
                     
                     # Record in ledger as estimated trade

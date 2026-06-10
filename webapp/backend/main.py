@@ -341,3 +341,27 @@ def task_traces(task_id: str):
         return {"traces": traces}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to load traces: {str(e)}")
+
+
+@app.get("/api/performance")
+def get_performance(
+    run_ids: str,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    benchmarks: Optional[str] = "SPY,QQQ"
+):
+    try:
+        from performance_analyzer import get_performance_data
+        ids_list = [r.strip() for r in run_ids.split(",") if r.strip()]
+        bench_list = [b.strip() for b in benchmarks.split(",") if b.strip()] if benchmarks else ["SPY", "QQQ"]
+        return get_performance_data(
+            run_ids=ids_list,
+            start_date_str=start_date,
+            end_date_str=end_date,
+            benchmark_symbols=bench_list
+        )
+    except Exception as e:
+        import traceback
+        logging.error(f"Failed to calculate performance: {e}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Failed to calculate performance data: {str(e)}")
+
